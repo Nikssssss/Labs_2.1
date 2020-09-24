@@ -22,11 +22,7 @@ public class App {
 
         Runtime.getRuntime().addShutdownHook(new Thread() {
             public void run() {
-                synchronized (this) {
-                    isWorking = false;
-                    reader.close();
-                    writer.close();
-                }
+                isWorking = false;
             }
         });
     }
@@ -35,15 +31,15 @@ public class App {
         String message = "Hello, world!";
         boolean isAdded, isRemoved;
         while (isWorking) {
-            synchronized (this) {
-                writer.write(message);
-                isAdded = reader.read();
-            }
+            writer.write(message);
+            isAdded = reader.read();
             isRemoved = checkRemoving();
             if (isAdded || isRemoved) {
                 printApps();
             }
         }
+        reader.close();
+        writer.close();
     }
 
     private boolean checkRemoving() {
