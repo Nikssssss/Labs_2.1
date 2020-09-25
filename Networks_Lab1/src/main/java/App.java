@@ -10,6 +10,7 @@ public class App {
     private final HashMap<AppID, Integer> apps;
     private final int maxTimeDifference = 6;
     private boolean isWorking = true;
+    private Thread thread = Thread.currentThread();
 
     public App(InetAddress groupAddress) {
         apps = new HashMap<>();
@@ -23,6 +24,12 @@ public class App {
         Runtime.getRuntime().addShutdownHook(new Thread() {
             public void run() {
                 isWorking = false;
+                System.out.println("Check CTRL-C");
+                try {
+                    thread.join();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
         });
     }
@@ -39,7 +46,9 @@ public class App {
             }
         }
         reader.close();
+        System.out.println("Reader closed");
         writer.close();
+        System.out.println("Writer closed");
     }
 
     private boolean checkRemoving() {
