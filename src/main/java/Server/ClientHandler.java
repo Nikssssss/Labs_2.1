@@ -2,6 +2,8 @@ package Server;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.zip.CRC32;
+import java.util.zip.Checksum;
 
 public class ClientHandler implements Runnable{
     private final Socket socket;
@@ -52,6 +54,7 @@ public class ClientHandler implements Runnable{
                 }
                 FileOutputStream fileOutputStream = new FileOutputStream(file);
 
+                Checksum fileHash = new CRC32();
                 byte[] buffer = new byte[2048];
                 int readCount;
                 int numberOfBytes = 0;
@@ -62,6 +65,7 @@ public class ClientHandler implements Runnable{
                     readCount = socketInputStream.read(buffer);
                     timeEnd = System.nanoTime();
                     fileOutputStream.write(buffer, 0, readCount);
+                    fileHash.update(buffer, 0, readCount);
                     if ((System.nanoTime() - lastUpdateTime > timeout) || numberOfBytes == 0) {
                         lastUpdateTime = System.nanoTime();
                         currentSpeed = calculateCurrentSpeed(timeEnd - timeStart, readCount);
@@ -74,7 +78,9 @@ public class ClientHandler implements Runnable{
                     }
                     numberOfBytes += readCount;
                 }
+                fileOutputStream.close();
 
+                socketOutputStream.writeLong(fileHash.getValue());
                 socketOutputStream.writeBoolean(file.length() == fileLength);
                 socketOutputStream.flush();
 
