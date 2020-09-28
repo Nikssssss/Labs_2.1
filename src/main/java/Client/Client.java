@@ -2,6 +2,8 @@ package Client;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.zip.CRC32;
+import java.util.zip.Checksum;
 
 public class Client {
     private File file;
@@ -41,15 +43,20 @@ public class Client {
                 socketOutputStream.writeLong(file.length());
                 socketOutputStream.flush();
 
+                Checksum fileHash = new CRC32();
                 byte[] buffer = new byte[2048];
                 FileInputStream fileInputStream = new FileInputStream(file);
                 int writeCount;
                 while ((writeCount = fileInputStream.read(buffer)) > 0) {
                     socketOutputStream.write(buffer, 0, writeCount);
+                    fileHash.update(buffer, 0, writeCount);
                     socketOutputStream.flush();
                 }
+                fileInputStream.close();
 
-                if (socketInputStream.readBoolean()) {
+                long sentFileHash = socketInputStream.readLong();
+                boolean hasSameLength = socketInputStream.readBoolean();
+                if (hasSameLength && sentFileHash == fileHash.getValue()) {
                     System.out.println("File was transferred successfully");
                 } else {
                     System.out.println("File transferring was failed");
