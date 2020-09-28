@@ -13,6 +13,20 @@ public class Client {
         file = new File(filePath);
         this.ip = ip;
         this.port = port;
+
+        Runtime.getRuntime().addShutdownHook(new Thread(){
+            @Override
+            public void run() {
+                try {
+                    if (!socket.isClosed()) {
+                        socket.close();
+                        System.out.println("Socket closed");
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
     }
 
     public void sendFile() {
@@ -21,29 +35,36 @@ public class Client {
             DataInputStream socketInputStream = new DataInputStream(socket.getInputStream());
             DataOutputStream socketOutputStream = new DataOutputStream(socket.getOutputStream());
 
+            socketOutputStream.writeInt(file.getName().length());
             socketOutputStream.writeUTF(file.getName());
-            socketOutputStream.writeLong(file.length());
-            socketOutputStream.flush();
-
-            byte[] buffer = new byte[2048];
-            FileInputStream fileInputStream = new FileInputStream(file);
-            int writeCount;
-            while ((writeCount = fileInputStream.read(buffer)) > 0) {
-                socketOutputStream.write(buffer, 0, writeCount);
-                socketOutputStream.flush();
-            }
-
             if (socketInputStream.readBoolean()) {
-                System.out.println("File was transferred successfully");
-            } else {
-                System.out.println("File transferring was failed");
-            }
+                socketOutputStream.writeLong(file.length());
+                socketOutputStream.flush();
 
-            socket.close();
-            System.out.println("socket " + socket.getInetAddress().getHostAddress() + ":" + socket.getPort() + " closed");
+                byte[] buffer = new byte[2048];
+                FileInputStream fileInputStream = new FileInputStream(file);
+                int writeCount;
+                while ((writeCount = fileInputStream.read(buffer)) > 0) {
+                    socketOutputStream.write(buffer, 0, writeCount);
+                    socketOutputStream.flush();
+                }
+
+                if (socketInputStream.readBoolean()) {
+                    System.out.println("File was transferred successfully");
+                } else {
+                    System.out.println("File transferring was failed");
+                }
+
+                if (!socket.isClosed()) {
+                    socket.close();
+                }
+                System.out.println("Socket " + socket.getInetAddress().getHostAddress() + ":" + socket.getPort() + " closed");
+            }
         } catch (IOException e){
             try {
-                socket.close();
+                if (!socket.isClosed()) {
+                    socket.close();
+                }
             } catch (IOException ioException) {
                 ioException.printStackTrace();
             }
