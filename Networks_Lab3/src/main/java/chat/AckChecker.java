@@ -20,7 +20,7 @@ public class AckChecker extends Observable implements Runnable{
 
     @Override
     public void run() {
-        while (true){
+        while (!Thread.currentThread().isInterrupted()){
             if (messageRecorder.isEmpty()){
                 synchronized (this) {
                     try {

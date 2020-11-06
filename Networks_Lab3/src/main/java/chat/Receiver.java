@@ -32,7 +32,7 @@ public class Receiver implements Runnable{
         Message incomingMessage;
         DatagramPacket packet;
         ObjectInputStream objectInput;
-        while (true){
+        while (!Thread.currentThread().isInterrupted()){
             packet = new DatagramPacket(buffer, buffer.length);
             try {
                 socket.receive(packet);
