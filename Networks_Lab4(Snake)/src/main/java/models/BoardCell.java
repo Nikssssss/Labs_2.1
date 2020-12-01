@@ -1,14 +1,17 @@
 package models;
 
+import java.util.ArrayList;
+
 public class BoardCell {
     private int x;
     private int y;
-    private BoardCellType boardCellType;
+    private ArrayList<BoardCellType> boardCellTypes;
 
     public BoardCell(int x, int y, BoardCellType boardCellType){
         this.x = x;
         this.y = y;
-        this.boardCellType = boardCellType;
+        boardCellTypes = new ArrayList<>();
+        setBoardCellType(boardCellType);
     }
 
     public int getX() {
@@ -20,10 +23,19 @@ public class BoardCell {
     }
 
     public BoardCellType getBoardCellType() {
-        return boardCellType;
+        return boardCellTypes.get(0);
     }
 
     public void setBoardCellType(BoardCellType boardCellType){
-        this.boardCellType = boardCellType;
+        boardCellTypes.clear();
+        boardCellTypes.add(boardCellType);
+    }
+
+    public void addBoardCellType(BoardCellType boardCellType){
+        boardCellTypes.add(boardCellType);
+    }
+
+    public int getSnakesOnCellCount(){
+        return boardCellTypes.size();
     }
 }

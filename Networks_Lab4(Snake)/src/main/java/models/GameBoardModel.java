@@ -35,10 +35,13 @@ public class GameBoardModel {
         }
     }
 
-    public void clearBoard(){
+    public void clearSnakeCells(){
         for (int i = 0; i < rows; i++){
             for (int j = 0; j < columns; j++){
-                boardCells.get(i * rows + j).setBoardCellType(BoardCellType.EMPTY);
+                BoardCell currentBoardCell = boardCells.get(i * rows + j);
+                if (currentBoardCell.getBoardCellType() == BoardCellType.SNAKE_BODY || currentBoardCell.getBoardCellType() == BoardCellType.SNAKE_HEAD) {
+                    currentBoardCell.setBoardCellType(BoardCellType.EMPTY);
+                }
             }
         }
     }
@@ -82,11 +85,51 @@ public class GameBoardModel {
         snakes.add(snake);
     }
 
+    public void removeSnake(GameState.Snake snake){
+        snakes.remove(snake);
+    }
+
     public void addSnakeCoordinates(List<GameState.Coord> coordinates){
-        boardCells.get(coordinates.get(0).getY() * rows + coordinates.get(0).getX()).setBoardCellType(BoardCellType.SNAKE_HEAD);
-        for (int i = 1; i < coordinates.size(); i++){
-            boardCells.get(coordinates.get(i).getY() * rows + coordinates.get(i).getX()).setBoardCellType(BoardCellType.SNAKE_BODY);
+        BoardCell currentCell = boardCells.get(coordinates.get(0).getY() * rows + coordinates.get(0).getX());
+        if (currentCell.getBoardCellType() == BoardCellType.SNAKE_BODY || currentCell.getBoardCellType() == BoardCellType.SNAKE_HEAD) {
+            currentCell.addBoardCellType(BoardCellType.SNAKE_HEAD);
         }
+        else {
+            currentCell.setBoardCellType(BoardCellType.SNAKE_HEAD);
+        }
+        for (int i = 1; i < coordinates.size(); i++){
+            currentCell = boardCells.get(coordinates.get(i).getY() * rows + coordinates.get(i).getX());
+            if (currentCell.getBoardCellType() == BoardCellType.SNAKE_BODY || currentCell.getBoardCellType() == BoardCellType.SNAKE_HEAD) {
+                currentCell.addBoardCellType(BoardCellType.SNAKE_BODY);
+            }
+            else{
+                currentCell.setBoardCellType(BoardCellType.SNAKE_BODY);
+            }
+        }
+    }
+
+    public void addAllFoodCoordinates(List<GameState.Coord> coordinates){
+        for (var coordinate : coordinates){
+            boardCells.get(coordinate.getY() * rows + coordinate.getX()).setBoardCellType(BoardCellType.FOOD);
+        }
+    }
+
+    public void addFoodCoordinates(GameState.Coord coordinates){
+        boardCells.get(coordinates.getY() * rows + coordinates.getX()).setBoardCellType(BoardCellType.FOOD);
+    }
+
+    public void emptyCell(GameState.Coord coordinates){
+        boardCells.get(coordinates.getY() * rows + coordinates.getX()).setBoardCellType(BoardCellType.EMPTY);
+    }
+
+    public int getFoodCount(){
+        int count = 0;
+        for (var cell : boardCells){
+            if (cell.getBoardCellType() == BoardCellType.FOOD){
+                count++;
+            }
+        }
+        return count;
     }
 
     public ArrayList<BoardCell> getBoardCells(){
@@ -109,6 +152,20 @@ public class GameBoardModel {
         return boardCells.get(rows * y + x).getBoardCellType() == BoardCellType.FOOD;
     }
 
+    public boolean isEmptyCell(int x, int y){
+        return boardCells.get(rows * y + x).getBoardCellType() == BoardCellType.EMPTY;
+    }
+
+    public int getEmptyCount(){
+        int count = 0;
+        for (var cell : boardCells){
+            if (cell.getBoardCellType() == BoardCellType.EMPTY){
+                count++;
+            }
+        }
+        return count;
+    }
+
     public void changeSnakeDirection(Integer playerId, Direction headDirection){
         if (playerSnakeDirection.containsKey(playerId)){
             playerSnakeDirection.replace(playerId, headDirection);
@@ -124,5 +181,13 @@ public class GameBoardModel {
 
     public InetSocketAddress getMasterAddress(){
         return masterAddress;
+    }
+
+    public int getNumberOfPlayers(){
+        return playersScore.size();
+    }
+
+    public int getNumberOfSnakes(){
+        return snakes.size();
     }
 }
