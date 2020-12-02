@@ -26,7 +26,7 @@ public class GameBoardController implements Observer {
     }
 
     public void createGame(){
-        gameProcess = new ServerGameProcess(gameBoardModel, gameBoardView, 200);
+        gameProcess = new ServerGameProcess(gameBoardModel, gameBoardView, 1000);
         gameProcess.createGame();
         gameProcess.start();
     }

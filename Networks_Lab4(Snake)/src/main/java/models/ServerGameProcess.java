@@ -33,9 +33,9 @@ public class ServerGameProcess implements GameProcess{
                     gameBoardModel.getSnakes().set(i, nextStepSnake);
                 }
                 checkCollisions();
+                placeFood();
                 gameBoardView.setCells(gameBoardModel.getBoardCells());
                 gameBoardView.repaint();
-                placeFood();
                 try {
                     Thread.sleep(stateDelay);
                 } catch (InterruptedException e) {
