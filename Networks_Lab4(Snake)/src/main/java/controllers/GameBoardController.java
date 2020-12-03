@@ -4,6 +4,9 @@ import gui.GameBoardView;
 import models.GameBoardModel;
 import models.GameProcess;
 import models.ServerGameProcess;
+import net.MulticastSender;
+import net.UnicastReceiver;
+import net.UnicastSender;
 import observers.Observer;
 import protocols.SnakeProto.*;
 
@@ -14,19 +17,26 @@ public class GameBoardController implements Observer {
     private GameBoardModel gameBoardModel;
     private StatusController statusController;
     private GameProcess gameProcess;
+    private MulticastSender multicastSender;
+    private UnicastSender unicastSender;
+    private UnicastReceiver unicastReceiver;
 
-    public GameBoardController(GameBoardView gameBoardView, GameBoardModel gameBoardModel, StatusController statusController){
+    public GameBoardController(GameBoardView gameBoardView, GameBoardModel gameBoardModel, StatusController statusController,
+                               MulticastSender multicastSender, UnicastSender unicastSender, UnicastReceiver unicastReceiver){
         this.gameBoardView = gameBoardView;
         this.gameBoardModel = gameBoardModel;
         this.statusController = statusController;
+        this.multicastSender = multicastSender;
+        this.unicastSender = unicastSender;
+        this.unicastReceiver = unicastReceiver;
     }
 
     public JPanel getGameBoardPanel(){
         return gameBoardView.getGameBoardPanel();
     }
 
-    public void createGame(){
-        gameProcess = new ServerGameProcess(gameBoardModel, gameBoardView, 1000);
+    public void createGame(GameConfig gameConfig){
+        gameProcess = new ServerGameProcess(gameBoardModel, gameBoardView, multicastSender, gameConfig);
         gameProcess.createGame();
         gameProcess.start();
     }
@@ -40,16 +50,16 @@ public class GameBoardController implements Observer {
         if (gameBoardModel.getMasterAddress() == null) {
             switch ((String) arg) {
                 case "PressedW" -> {
-                    gameBoardModel.changeSnakeDirection(0, Direction.UP);
+                    gameProcess.turnUp();
                 }
                 case "PressedA" -> {
-                    gameBoardModel.changeSnakeDirection(0, Direction.LEFT);
+                    gameProcess.turnLeft();
                 }
                 case "PressedS" -> {
-                    gameBoardModel.changeSnakeDirection(0, Direction.DOWN);
+                    gameProcess.turnDown();
                 }
                 case "PressedD" -> {
-                    gameBoardModel.changeSnakeDirection(0, Direction.RIGHT);
+                    gameProcess.turnRight();
                 }
             }
         }

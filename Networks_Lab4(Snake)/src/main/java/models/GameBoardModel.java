@@ -4,25 +4,29 @@ import exceptions.NoEmptyCellException;
 import protocols.SnakeProto.*;
 
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class GameBoardModel {
     private int rows;
     private int columns;
     private ArrayList<BoardCell> boardCells;
-    private ArrayList<GameState.Snake> snakes;
-    private ConcurrentHashMap<Integer, Direction> playerSnakeDirection;
+    private HashMap<GamePlayer, GameState.Snake> playerSnakes;
+    private ConcurrentHashMap<GamePlayer, Direction> playerSnakeDirection;
     private HashMap<GamePlayer, Integer> playersScore;
+    private HashMap<GamePlayer, Long> lastMessageTime;
+    private HashMap<UnconfirmedMessage, Long> unconfirmedMessages;
+    private HashMap<GamePlayer, GameMessage> receivedMessages;
     private InetSocketAddress masterAddress;
+    private int ownPlayerID;
 
     public GameBoardModel(){
         boardCells = new ArrayList<>();
-        snakes = new ArrayList<>();
+        playerSnakes = new HashMap<>();
         playersScore = new HashMap<>();
         playerSnakeDirection = new ConcurrentHashMap<>();
+        lastMessageTime = new HashMap<>();
+        unconfirmedMessages = new HashMap<>();
     }
 
     public void createBoard(int rows, int columns){
@@ -81,12 +85,12 @@ public class GameBoardModel {
         return true;
     }
 
-    public void addSnake(GameState.Snake snake){
-        snakes.add(snake);
+    public void addSnake(GamePlayer gamePlayer, GameState.Snake snake){
+        playerSnakes.put(gamePlayer, snake);
     }
 
     public void removeSnake(GameState.Snake snake){
-        snakes.remove(snake);
+        playerSnakes.entrySet().removeIf(playerSnakeEntry -> playerSnakeEntry.getValue().equals(snake));
     }
 
     public void addSnakeCoordinates(List<GameState.Coord> coordinates){
@@ -108,9 +112,54 @@ public class GameBoardModel {
         }
     }
 
+    public void addUnconfirmedMessage(UnconfirmedMessage unconfirmedMessage){
+        unconfirmedMessages.put(unconfirmedMessage, System.currentTimeMillis());
+    }
+
+    public void removeUnconfirmedMessage(UnconfirmedMessage unconfirmedMessage){
+        unconfirmedMessages.remove(unconfirmedMessage);
+    }
+
+    public void updateUnconfirmedMessage(UnconfirmedMessage unconfirmedMessage){
+        unconfirmedMessages.replace(unconfirmedMessage, System.currentTimeMillis());
+    }
+
+    public boolean addReceivedMessage(GamePlayer gamePlayer, GameMessage gameMessage){
+        for (var entry : receivedMessages.entrySet()){
+            if (entry.getKey().equals(gamePlayer)){
+                GameMessage currentMessage = entry.getValue();
+                if (currentMessage.hasSteer() && gameMessage.hasSteer()){
+                    if (currentMessage.getMsgSeq() < gameMessage.getMsgSeq()){
+                        receivedMessages.replace(gamePlayer, gameMessage);
+                        return true;
+                    }
+                    else return false;
+                }
+                else if (currentMessage.hasState() && gameMessage.hasState()){
+                    if (currentMessage.getMsgSeq() < gameMessage.getMsgSeq()){
+                        receivedMessages.replace(gamePlayer, gameMessage);
+                        return true;
+                    }
+                    else return false;
+                }
+            }
+        }
+        receivedMessages.put(gamePlayer, gameMessage);
+        return true;
+    }
+
     public void addAllFoodCoordinates(List<GameState.Coord> coordinates){
         for (var coordinate : coordinates){
             boardCells.get(coordinate.getY() * rows + coordinate.getX()).setBoardCellType(BoardCellType.FOOD);
+        }
+    }
+
+    public void updatePlayerTime(InetSocketAddress playerAddress){
+        for (var entry : lastMessageTime.entrySet()){
+            if (entry.getKey().getIpAddress().equals(playerAddress.getHostName()) && entry.getKey().getPort() == playerAddress.getPort()){
+                lastMessageTime.replace(entry.getKey(), System.currentTimeMillis());
+                break;
+            }
         }
     }
 
@@ -120,6 +169,10 @@ public class GameBoardModel {
 
     public void emptyCell(GameState.Coord coordinates){
         boardCells.get(coordinates.getY() * rows + coordinates.getX()).setBoardCellType(BoardCellType.EMPTY);
+    }
+
+    public Set<GamePlayer> getPlayers(){
+        return playersScore.keySet();
     }
 
     public int getFoodCount(){
@@ -132,12 +185,16 @@ public class GameBoardModel {
         return count;
     }
 
+    public void setOwnPlayerID(int ownPlayerID){
+        this.ownPlayerID = ownPlayerID;
+    }
+
     public ArrayList<BoardCell> getBoardCells(){
         return boardCells;
     }
 
     public ArrayList<GameState.Snake> getSnakes(){
-        return snakes;
+        return new ArrayList<>(playerSnakes.values());
     }
 
     public int getRows(){
@@ -166,17 +223,52 @@ public class GameBoardModel {
         return count;
     }
 
-    public void changeSnakeDirection(Integer playerId, Direction headDirection){
-        if (playerSnakeDirection.containsKey(playerId)){
-            playerSnakeDirection.replace(playerId, headDirection);
+    public Set<Map.Entry<GamePlayer, GameState.Snake>> getPlayerSnakesSet(){
+        return playerSnakes.entrySet();
+    }
+
+    public GamePlayer getPlayerByID(int playerID){
+        GamePlayer gamePlayer = null;
+        for (var entry : playerSnakes.entrySet()){
+            if (entry.getKey().getId() == playerID){
+                gamePlayer = entry.getKey();
+                break;
+            }
+        }
+        return gamePlayer;
+    }
+
+    public GamePlayer getPlayerByAddress(InetSocketAddress playerAddress){
+        GamePlayer gamePlayer = null;
+        for (var entry : playerSnakes.entrySet()){
+            if (entry.getKey().getIpAddress().equals(playerAddress.getHostName()) && entry.getKey().getPort() == playerAddress.getPort()){
+                gamePlayer = entry.getKey();
+                break;
+            }
+        }
+        return gamePlayer;
+    }
+
+    public void changeSnakeDirection(GamePlayer gamePlayer, Direction headDirection){
+        if (playerSnakeDirection.containsKey(gamePlayer)){
+            playerSnakeDirection.replace(gamePlayer, headDirection);
         }
         else {
-            playerSnakeDirection.put(playerId, headDirection);
+            playerSnakeDirection.put(gamePlayer, headDirection);
         }
     }
 
-    public Direction getSnakeDirection(Integer playerId){
-        return playerSnakeDirection.get(playerId);
+    public Direction getSnakeDirection(GamePlayer gamePlayer) {
+        return playerSnakeDirection.get(gamePlayer);
+    }
+
+    public void replaceSnake(GameState.Snake oldSnake, GameState.Snake newSnake){
+        for (var entry : playerSnakes.entrySet()){
+            if (entry.getValue().equals(oldSnake)){
+                playerSnakes.replace(entry.getKey(), newSnake);
+                break;
+            }
+        }
     }
 
     public InetSocketAddress getMasterAddress(){
@@ -188,6 +280,6 @@ public class GameBoardModel {
     }
 
     public int getNumberOfSnakes(){
-        return snakes.size();
+        return playerSnakes.size();
     }
 }

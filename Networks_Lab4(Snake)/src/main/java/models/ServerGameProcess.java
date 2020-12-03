@@ -3,6 +3,7 @@ package models;
 import exceptions.IllegalDirectionException;
 import exceptions.NoEmptyCellException;
 import gui.GameBoardView;
+import net.MulticastSender;
 import protocols.SnakeProto;
 import protocols.SnakeProto.*;
 
@@ -16,28 +17,32 @@ public class ServerGameProcess implements GameProcess{
     private Thread processThread;
     private GameBoardModel gameBoardModel;
     private GameBoardView gameBoardView;
-    private final int stateDelay;
     private Random random = new Random();
-    private final int foodStatic = 1;
-    private final int foodPerPlayer = 2;
-    private final double deadFoodProbability = 0.3;
+    private MulticastSender multicastSender;
+    private Thread multicastSenderThread;
+    private GameConfig gameConfig;
 
     private class Process implements Runnable{
         @Override
         public void run() {
             while (!Thread.currentThread().isInterrupted()) {
                 gameBoardModel.clearSnakeCells();
-                for (int i = 0; i < gameBoardModel.getSnakes().size(); i++){
-                    GameState.Snake prevStepSnake = gameBoardModel.getSnakes().get(i);
-                    GameState.Snake nextStepSnake = moveSnake(prevStepSnake, gameBoardModel.getSnakeDirection(prevStepSnake.getPlayerId()));
-                    gameBoardModel.getSnakes().set(i, nextStepSnake);
+//                for (int i = 0; i < gameBoardModel.getPlayerSnakesSet().size(); i++){
+//                    GameState.Snake prevStepSnake = gameBoardModel.getPlayerSnakesSet().
+//                    GameState.Snake nextStepSnake = moveSnake(prevStepSnake, gameBoardModel.getSnakeDirection(prevStepSnake));
+//                    gameBoardModel.replaceSnake(prevStepSnake, nextStepSnake);
+//                }
+                for (var entry : gameBoardModel.getPlayerSnakesSet()){
+                    GameState.Snake prevStepSnake = entry.getValue();
+                    GameState.Snake nextStepSnake = moveSnake(prevStepSnake, gameBoardModel.getSnakeDirection(entry.getKey()));
+                    gameBoardModel.replaceSnake(prevStepSnake, nextStepSnake);
                 }
                 checkCollisions();
                 placeFood();
                 gameBoardView.setCells(gameBoardModel.getBoardCells());
                 gameBoardView.repaint();
                 try {
-                    Thread.sleep(stateDelay);
+                    Thread.sleep(gameConfig.getStateDelayMs());
                 } catch (InterruptedException e) {
                     break;
                 }
@@ -45,17 +50,21 @@ public class ServerGameProcess implements GameProcess{
         }
     }
 
-    public ServerGameProcess(GameBoardModel gameBoardModel, GameBoardView gameBoardView, int stateDelay) {
+    public ServerGameProcess(GameBoardModel gameBoardModel, GameBoardView gameBoardView, MulticastSender multicastSender, GameConfig config) {
         process = new Process();
         this.gameBoardModel = gameBoardModel;
         this.gameBoardView = gameBoardView;
-        this.stateDelay = stateDelay;
+        this.gameConfig = config;
+        this.multicastSender = multicastSender;
+        multicastSenderThread = new Thread(multicastSender);
     }
 
     @Override
     public void start(){
         processThread = new Thread(process);
         processThread.start();
+        multicastSender.setConfig(gameConfig);
+        multicastSenderThread.start();
     }
 
     @Override
@@ -64,9 +73,29 @@ public class ServerGameProcess implements GameProcess{
     }
 
     @Override
+    public void turnLeft() {
+        gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByID(0), Direction.LEFT);
+    }
+
+    @Override
+    public void turnRight() {
+        gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByID(0), Direction.RIGHT);
+    }
+
+    @Override
+    public void turnUp() {
+        gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByID(0), Direction.UP);
+    }
+
+    @Override
+    public void turnDown() {
+        gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByID(0), Direction.DOWN);
+    }
+
+    @Override
     public void createGame(){
-        gameBoardModel.createBoard(20, 20);
-        gameBoardView.setGameBoardSize(20, 20);
+        gameBoardModel.createBoard(gameConfig.getWidth(), gameConfig.getHeight());
+        gameBoardView.setGameBoardSize(gameConfig.getWidth(), gameConfig.getHeight());
         gameBoardView.setCells(gameBoardModel.getBoardCells());
         GameState.Snake snake = null;
 //        try {
@@ -85,8 +114,16 @@ public class ServerGameProcess implements GameProcess{
                 .addPoints(coord(0, 3))
                 .addPoints(coord(5, 0))
                 .build();
-        gameBoardModel.addSnake(snake);
-        gameBoardModel.changeSnakeDirection(snake.getPlayerId(), snake.getHeadDirection());
+        GamePlayer gamePlayer = GamePlayer.newBuilder()
+                .setName("Name")
+                .setId(0)
+                .setIpAddress("")
+                .setPort(0)
+                .setRole(NodeRole.MASTER)
+                .setScore(0)
+                .build();
+        gameBoardModel.addSnake(gamePlayer, snake);
+        gameBoardModel.changeSnakeDirection(gamePlayer, snake.getHeadDirection());
         placeFood();
     }
 
@@ -295,7 +332,7 @@ public class ServerGameProcess implements GameProcess{
             }
         }
         for (var coordinate : deadSnakesCoordinates){
-            if (random.nextDouble() <= deadFoodProbability){
+            if (random.nextDouble() <= gameConfig.getDeadFoodProb()){
                 gameBoardModel.addFoodCoordinates(coordinate);
             }
             else {
@@ -308,8 +345,8 @@ public class ServerGameProcess implements GameProcess{
     }
 
     private void placeFood(){
-        if (gameBoardModel.getFoodCount() != (foodStatic + foodPerPlayer * gameBoardModel.getNumberOfPlayers())){
-            int requiredFood = (foodStatic + foodPerPlayer * gameBoardModel.getNumberOfSnakes()) - gameBoardModel.getFoodCount();
+        if (gameBoardModel.getFoodCount() != (gameConfig.getFoodStatic() + gameConfig.getFoodPerPlayer() * gameBoardModel.getNumberOfPlayers())){
+            int requiredFood = (gameConfig.getFoodStatic() + (int)gameConfig.getFoodPerPlayer() * gameBoardModel.getNumberOfSnakes()) - gameBoardModel.getFoodCount();
             int emptyCells = gameBoardModel.getEmptyCount();
             if (emptyCells < requiredFood){
                 requiredFood = emptyCells;

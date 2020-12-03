@@ -9,9 +9,12 @@ import gui.MainWindow;
 import gui.StatusView;
 import models.GameBoardModel;
 import models.LobbyModel;
+import net.*;
+import protocols.SnakeProto.*;
 
 import java.io.IOException;
 import java.net.DatagramSocket;
+import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
 
 public class GameLauncher implements IGameLauncher{
@@ -26,23 +29,31 @@ public class GameLauncher implements IGameLauncher{
     private LobbyModel lobbyModel;
     private MulticastSocket multicastSocket;
     private DatagramSocket unicastSocket;
+    private MulticastSender multicastSender;
+    private UnicastSender unicastSender;
+    private MulticastReceiver multicastReceiver;
+    private UnicastReceiver unicastReceiver;
 
     public GameLauncher() throws IOException {
         mainWindow = new MainWindow();
         lobbyView = new LobbyView();
         lobbyModel = new LobbyModel();
-        lobbyController = new LobbyController(lobbyView, lobbyModel, this);
+        gameBoardModel = new GameBoardModel();
+        multicastSocket = new MulticastSocket(9192);
+        unicastSocket = new DatagramSocket();
+        unicastSender = new UnicastSender(unicastSocket);
+        multicastReceiver = new MulticastReceiver(multicastSocket, new LobbyMessageHandler(lobbyModel));
+        unicastReceiver = new UnicastReceiver(unicastSocket, new GameBoardMessageHandler(gameBoardModel, unicastSender));
+        lobbyController = new LobbyController(lobbyView, lobbyModel, this, multicastReceiver);
         lobbyModel.addObserver(lobbyController);
         lobbyView.addObserver(lobbyController);
         statusView = new StatusView();
         statusController = new StatusController(statusView);
         statusView.addObserver(statusController);
         gameBoardView = new GameBoardView(statusView);
-        gameBoardModel = new GameBoardModel();
-        gameBoardController = new GameBoardController(gameBoardView, gameBoardModel, statusController);
+        multicastSender = new MulticastSender(new InetSocketAddress("239.192.0.4", 9192), unicastSocket, gameBoardModel.getPlayers());
+        gameBoardController = new GameBoardController(gameBoardView, gameBoardModel, statusController, multicastSender, unicastSender, unicastReceiver);
         gameBoardView.addObserver(gameBoardController);
-        multicastSocket = new MulticastSocket(9192);
-        unicastSocket = new DatagramSocket();
     }
 
     @Override
@@ -50,8 +61,8 @@ public class GameLauncher implements IGameLauncher{
         mainWindow.showPanel(lobbyController.getLobbyPanel());
     }
 
-    public void createGame(){
-        gameBoardController.createGame();
+    public void createGame(GameConfig gameConfig){
+        gameBoardController.createGame(gameConfig);
         mainWindow.showPanel(gameBoardController.getGameBoardPanel());
     }
 }

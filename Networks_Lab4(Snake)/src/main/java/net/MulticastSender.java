@@ -6,20 +6,23 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
+import java.util.Set;
 
 public class MulticastSender implements Runnable{
     private InetSocketAddress multicastAddress;
     private DatagramSocket unicastSocket;
-    private ArrayList<GamePlayer> players;
-    private final GameConfig config;
+    private Set<GamePlayer> players;
+    private GameConfig config;
     private long currentMsgSeq = Long.MIN_VALUE;
 
-    public MulticastSender(InetSocketAddress multicastAddress, DatagramSocket unicastSocket, ArrayList<GamePlayer> players, GameConfig config){
+    public MulticastSender(InetSocketAddress multicastAddress, DatagramSocket unicastSocket, Set<GamePlayer> players){
         this.multicastAddress = multicastAddress;
         this.unicastSocket = unicastSocket;
         this.players = players;
-        this.config = config;
+    }
+
+    public void setConfig(GameConfig gameConfig){
+        this.config = gameConfig;
     }
 
     @Override
