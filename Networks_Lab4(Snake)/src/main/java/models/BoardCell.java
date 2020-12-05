@@ -38,4 +38,13 @@ public class BoardCell {
     public int getSnakesOnCellCount(){
         return boardCellTypes.size();
     }
+
+    public boolean hasOnlyHeads(){
+        for (var type : boardCellTypes){
+            if (!(type == BoardCellType.ENEMY_HEAD || type == BoardCellType.OWN_HEAD)){
+                return false;
+            }
+        }
+        return true;
+    }
 }

@@ -1,8 +1,10 @@
 package models;
 
 public enum BoardCellType {
-    SNAKE_BODY,
-    SNAKE_HEAD,
+    OWN_BODY,
+    OWN_HEAD,
+    ENEMY_BODY,
+    ENEMY_HEAD,
     FOOD,
     EMPTY
 }

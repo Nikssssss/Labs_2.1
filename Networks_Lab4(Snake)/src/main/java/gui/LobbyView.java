@@ -53,7 +53,7 @@ public class LobbyView extends Observable {
             public void mousePressed(MouseEvent e) {
                 super.mousePressed(e);
                 if (availableGames.getSelectedColumn() == 4){
-                    System.out.println(availableGames.getSelectedRow() + " " + availableGames.getSelectedColumn());
+                    notifyObservers(availableGamesModel.getDataVector().elementAt(availableGames.getSelectedRow()).elementAt(1));
                 }
             }
         });

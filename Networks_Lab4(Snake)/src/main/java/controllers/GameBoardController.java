@@ -4,6 +4,7 @@ import gui.GameBoardView;
 import models.GameBoardModel;
 import models.GameProcess;
 import models.ServerGameProcess;
+import net.ClientGameProcess;
 import net.MulticastSender;
 import net.UnicastReceiver;
 import net.UnicastSender;
@@ -11,6 +12,7 @@ import observers.Observer;
 import protocols.SnakeProto.*;
 
 import javax.swing.*;
+import java.net.InetSocketAddress;
 
 public class GameBoardController implements Observer {
     private GameBoardView gameBoardView;
@@ -35,10 +37,18 @@ public class GameBoardController implements Observer {
         return gameBoardView.getGameBoardPanel();
     }
 
-    public void createGame(GameConfig gameConfig){
-        gameProcess = new ServerGameProcess(gameBoardModel, gameBoardView, multicastSender, gameConfig);
-        gameProcess.createGame();
+    public void createServerGame(GameConfig gameConfig){
+        gameProcess = new ServerGameProcess(gameBoardModel, gameBoardView, multicastSender, gameConfig, unicastSender, unicastReceiver);
+        gameProcess.createGame("Name");
         gameProcess.start();
+        unicastReceiver.setGameProcess(gameProcess);
+    }
+
+    public void createClientGame(GameConfig gameConfig, InetSocketAddress master){
+        gameProcess = new ClientGameProcess(gameBoardModel, gameBoardView, unicastSender, unicastReceiver, gameConfig, master);
+        gameProcess.createGame("Name");
+        gameProcess.start();
+        unicastReceiver.setGameProcess(gameProcess);
     }
 
     private GameState.Coord coord(int x, int y) {
@@ -47,20 +57,18 @@ public class GameBoardController implements Observer {
 
     @Override
     public void update(Object arg) {
-        if (gameBoardModel.getMasterAddress() == null) {
-            switch ((String) arg) {
-                case "PressedW" -> {
-                    gameProcess.turnUp();
-                }
-                case "PressedA" -> {
-                    gameProcess.turnLeft();
-                }
-                case "PressedS" -> {
-                    gameProcess.turnDown();
-                }
-                case "PressedD" -> {
-                    gameProcess.turnRight();
-                }
+        switch ((String) arg) {
+            case "PressedW" -> {
+                gameProcess.turnUp();
+            }
+            case "PressedA" -> {
+                gameProcess.turnLeft();
+            }
+            case "PressedS" -> {
+                gameProcess.turnDown();
+            }
+            case "PressedD" -> {
+                gameProcess.turnRight();
             }
         }
     }

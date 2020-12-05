@@ -1,13 +1,13 @@
 package models;
 
 import observers.Observable;
-import protocols.SnakeProto;
+import protocols.SnakeProto.*;
 
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 
 public class LobbyModel extends Observable {
-    private HashMap<InetSocketAddress, SnakeProto.GameConfig> availableGames;
+    private HashMap<InetSocketAddress, GameConfig> availableGames;
     private HashMap<InetSocketAddress, Long> hostsID;
 
     public LobbyModel(){
@@ -15,7 +15,7 @@ public class LobbyModel extends Observable {
         hostsID = new HashMap<>();
     }
 
-    public void addAvailableGame(InetSocketAddress hostAddress, SnakeProto.GameConfig gameConfig){
+    public void addAvailableGame(InetSocketAddress hostAddress, GameConfig gameConfig){
         if (availableGames.containsKey(hostAddress)){
             if (!availableGames.get(hostAddress).equals(gameConfig)){
                 availableGames.replace(hostAddress, gameConfig);
@@ -46,6 +46,10 @@ public class LobbyModel extends Observable {
         return hostAddress;
     }
 
+    public GameConfig getConfigByAddress(InetSocketAddress socketAddress){
+        return availableGames.get(socketAddress);
+    }
+
     public void removeAvailableGame(InetSocketAddress hostAddress){
         notifyObservers(new GameInfo(hostAddress, hostsID.get(hostAddress), availableGames.get(hostAddress).getWidth(),
                 availableGames.get(hostAddress).getHeight(), availableGames.get(hostAddress).getFoodStatic(),
@@ -54,7 +58,7 @@ public class LobbyModel extends Observable {
         hostsID.remove(hostAddress);
     }
 
-    public HashMap<InetSocketAddress, SnakeProto.GameConfig> getAvailableGames(){
+    public HashMap<InetSocketAddress, GameConfig> getAvailableGames(){
         return availableGames;
     }
 

@@ -1,9 +1,11 @@
 package net;
 
-import protocols.SnakeProto;
+import models.GameProcess;
+import protocols.SnakeProto.*;
 
 import java.net.InetSocketAddress;
 
 public interface MessageHandler {
-    void handle(SnakeProto.GameMessage gameMessage, InetSocketAddress sender);
+    void handle(GameMessage gameMessage, InetSocketAddress sender);
+    void setGameProcess(GameProcess gameProcess);
 }

@@ -40,16 +40,20 @@ public class LobbyController implements Observer {
                 lobbyView.removeAvailableGame((GameInfo) arg);
             }
         }
+        else if (arg instanceof Long){
+            GameConfig gameConfig = lobbyModel.getConfigByAddress(lobbyModel.getHostByID((long)arg));
+            gameLauncher.createClientGame(gameConfig, lobbyModel.getHostByID((long)arg));
+        }
         else if (arg.equals("CreateGame")){
             GameConfig gameConfig = GameConfig.newBuilder()
-                    .setWidth(50)
-                    .setHeight(50)
+                    .setWidth(30)
+                    .setHeight(30)
                     .setFoodStatic(1)
                     .setFoodPerPlayer(2)
                     .setDeadFoodProb(0.3f)
                     .setNodeTimeoutMs(2000)
                     .build();
-            gameLauncher.createGame(gameConfig);
+            gameLauncher.createServerGame(gameConfig);
         }
     }
 }

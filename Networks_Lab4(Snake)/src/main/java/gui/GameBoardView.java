@@ -31,9 +31,11 @@ public class GameBoardView extends Observable {
                 for (int j = 0; j < columns; j++) {
                     switch(cells.get(i * rows + j).getBoardCellType()){
                         case EMPTY -> g2d.setColor(new Color(21, 0, 39));
-                        case SNAKE_BODY -> g2d.setColor(new Color(35, 110, 39));
-                        case SNAKE_HEAD -> g2d.setColor(new Color(25, 170, 39));
+                        case OWN_BODY -> g2d.setColor(new Color(35, 110, 39));
+                        case OWN_HEAD -> g2d.setColor(new Color(25, 170, 39));
                         case FOOD -> g2d.setColor(new Color(215, 215, 78));
+                        case ENEMY_BODY -> g2d.setColor(new Color(142, 39, 17));
+                        case ENEMY_HEAD -> g2d.setColor(new Color(180, 39, 17));
                     }
                     g2d.fillRect(j, i, 1, 1);
                 }
@@ -119,7 +121,7 @@ public class GameBoardView extends Observable {
         int scalingConst = 16;
         scalingFactor = scalingConst * (maxCellNumber / rows);
         gameBoardPanel.setPreferredSize(new Dimension(rows * (scalingFactor / 2), columns * (scalingFactor / 2)));
-        scalingFactor /= 2;
+        //scalingFactor /= 2;
     }
 
     public void setCells(ArrayList<BoardCell> cells){

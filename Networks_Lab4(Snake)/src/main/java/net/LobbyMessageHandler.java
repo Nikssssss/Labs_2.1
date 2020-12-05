@@ -1,5 +1,6 @@
 package net;
 
+import models.GameProcess;
 import models.LobbyModel;
 import protocols.SnakeProto.*;
 
@@ -17,5 +18,10 @@ public class LobbyMessageHandler implements MessageHandler{
         if (gameMessage.hasAnnouncement()){
             lobbyModel.addAvailableGame(sender, gameMessage.getAnnouncement().getConfig());
         }
+    }
+
+    @Override
+    public void setGameProcess(GameProcess gameProcess) {
+
     }
 }

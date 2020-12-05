@@ -1,5 +1,6 @@
 package net;
 
+import models.GameProcess;
 import protocols.SnakeProto;
 
 import java.io.IOException;
@@ -17,16 +18,20 @@ public class UnicastReceiver implements Runnable{
         this.messageHandler = messageHandler;
     }
 
+    public void setGameProcess(GameProcess gameProcess){
+        messageHandler.setGameProcess(gameProcess);
+    }
+
     @Override
     public void run() {
-        byte[] buffer = new byte[2048];
+        byte[] buffer = new byte[5012];
         DatagramPacket packet;
         while (!Thread.currentThread().isInterrupted()) {
             packet = new DatagramPacket(buffer, buffer.length);
             try {
                 unicastSocket.receive(packet);
-                buffer = Arrays.copyOfRange(packet.getData(), 0, packet.getLength());
-                SnakeProto.GameMessage gameMessage = SnakeProto.GameMessage.parseFrom(buffer);
+                byte[] message = Arrays.copyOfRange(packet.getData(), 0, packet.getLength());
+                SnakeProto.GameMessage gameMessage = SnakeProto.GameMessage.parseFrom(message);
                 messageHandler.handle(gameMessage, new InetSocketAddress(packet.getAddress(), packet.getPort()));
             } catch (IOException e) {
                 break;

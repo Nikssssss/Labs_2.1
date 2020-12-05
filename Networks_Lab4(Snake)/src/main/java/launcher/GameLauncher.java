@@ -61,8 +61,14 @@ public class GameLauncher implements IGameLauncher{
         mainWindow.showPanel(lobbyController.getLobbyPanel());
     }
 
-    public void createGame(GameConfig gameConfig){
-        gameBoardController.createGame(gameConfig);
+    public void createServerGame(GameConfig gameConfig){
+        gameBoardController.createServerGame(gameConfig);
+        mainWindow.showPanel(gameBoardController.getGameBoardPanel());
+    }
+
+    @Override
+    public void createClientGame(GameConfig gameConfig, InetSocketAddress master) {
+        gameBoardController.createClientGame(gameConfig, master);
         mainWindow.showPanel(gameBoardController.getGameBoardPanel());
     }
 }

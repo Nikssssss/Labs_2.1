@@ -15,7 +15,7 @@ public class UnicastSender {
         this.unicastSocket = unicastSocket;
     }
 
-    public void sendJoinMessage(String name, InetSocketAddress receiverAddress){
+    public GameMessage sendJoinMessage(String name, InetSocketAddress receiverAddress) throws IOException {
         GameMessage.JoinMsg joinMsg = GameMessage.JoinMsg.newBuilder()
                 .setName(name)
                 .build();
@@ -24,9 +24,10 @@ public class UnicastSender {
                 .setJoin(joinMsg)
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
+        return gameMessage;
     }
 
-    public void sendPingMessage(InetSocketAddress receiverAddress){
+    public GameMessage sendPingMessage(InetSocketAddress receiverAddress) throws IOException {
         GameMessage.PingMsg pingMsg = GameMessage.PingMsg.newBuilder()
                 .build();
         GameMessage gameMessage = GameMessage.newBuilder()
@@ -34,9 +35,10 @@ public class UnicastSender {
                 .setPing(pingMsg)
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
+        return gameMessage;
     }
 
-    public void sendSteerMsg(Direction direction, InetSocketAddress receiverAddress){
+    public GameMessage sendSteerMsg(Direction direction, InetSocketAddress receiverAddress) throws IOException {
         GameMessage.SteerMsg steerMsg = GameMessage.SteerMsg.newBuilder()
                 .setDirection(direction)
                 .build();
@@ -45,9 +47,10 @@ public class UnicastSender {
                 .setSteer(steerMsg)
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
+        return gameMessage;
     }
 
-    public void sendAckMsg(long receivedMsgSeq, InetSocketAddress receiverAddress){
+    public void sendAckMsg(long receivedMsgSeq, InetSocketAddress receiverAddress) throws IOException {
         GameMessage.AckMsg ackMsg = GameMessage.AckMsg.newBuilder()
                 .build();
         GameMessage gameMessage = GameMessage.newBuilder()
@@ -57,7 +60,18 @@ public class UnicastSender {
         sendGameMessage(gameMessage, receiverAddress);
     }
 
-    public void sendStateMsg(GameState gameState, InetSocketAddress receiverAddress){
+    public void sendAckMsg(long receivedMsgSeq, InetSocketAddress receiverAddress, int receiverID) throws IOException {
+        GameMessage.AckMsg ackMsg = GameMessage.AckMsg.newBuilder()
+                .build();
+        GameMessage gameMessage = GameMessage.newBuilder()
+                .setMsgSeq(receivedMsgSeq)
+                .setReceiverId(receiverID)
+                .setAck(ackMsg)
+                .build();
+        sendGameMessage(gameMessage, receiverAddress);
+    }
+
+    public GameMessage sendStateMsg(GameState gameState, InetSocketAddress receiverAddress) throws IOException {
         GameMessage.StateMsg stateMsg = GameMessage.StateMsg.newBuilder()
                 .setState(gameState)
                 .build();
@@ -66,9 +80,10 @@ public class UnicastSender {
                 .setState(stateMsg)
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
+        return gameMessage;
     }
 
-    public void sendErrorMsg(String errorMessage, InetSocketAddress receiverAddress){
+    public GameMessage sendErrorMsg(String errorMessage, InetSocketAddress receiverAddress) throws IOException {
         GameMessage.ErrorMsg errorMsg = GameMessage.ErrorMsg.newBuilder()
                 .setErrorMessage(errorMessage)
                 .build();
@@ -77,9 +92,10 @@ public class UnicastSender {
                 .setError(errorMsg)
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
+        return gameMessage;
     }
 
-    public void sendRoleChangeMsg(NodeRole senderRole, NodeRole receiverRole, InetSocketAddress receiverAddress){
+    public GameMessage sendRoleChangeMsg(NodeRole senderRole, NodeRole receiverRole, InetSocketAddress receiverAddress) throws IOException {
         GameMessage.RoleChangeMsg roleChangeMsg;
         if (receiverRole == null) {
             roleChangeMsg = GameMessage.RoleChangeMsg.newBuilder()
@@ -96,15 +112,12 @@ public class UnicastSender {
                 .setRoleChange(roleChangeMsg)
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
+        return gameMessage;
     }
 
-    private void sendGameMessage(GameMessage gameMessage, InetSocketAddress receiverAddress){
+    private void sendGameMessage(GameMessage gameMessage, InetSocketAddress receiverAddress) throws IOException {
         byte[] byteMessage = gameMessage.toByteArray();
         DatagramPacket packet = new DatagramPacket(byteMessage, byteMessage.length, receiverAddress);
-        try {
-            unicastSocket.send(packet);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        unicastSocket.send(packet);
     }
 }
