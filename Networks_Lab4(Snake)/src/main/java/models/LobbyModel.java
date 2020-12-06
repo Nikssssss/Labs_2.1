@@ -35,6 +35,11 @@ public class LobbyModel extends Observable {
         }
     }
 
+    public void clearAvailableGames(){
+        availableGames.clear();
+        hostsID.clear();
+    }
+
     public InetSocketAddress getHostByID(long hostID){
         InetSocketAddress hostAddress = null;
         for (var entry : hostsID.entrySet()){

@@ -64,6 +64,8 @@ public class GameBoardModel {
         throw new NoEmptyCellException();
     }
 
+
+
     public int getOwnPlayerID(){
         return ownPlayerID;
     }
@@ -187,13 +189,14 @@ public class GameBoardModel {
         this.masterAddress = masterAddress;
     }
 
-    public void changePlayerRole(GamePlayer gamePlayer, NodeRole nodeRole){
+    public GamePlayer changePlayerRole(GamePlayer gamePlayer, NodeRole nodeRole){
         GamePlayer changingPlayer = null;
         GameState.Snake playerSnake = null;
         for (var entry : playerSnakes.entrySet()){
             if (entry.getKey().equals(gamePlayer)){
                 changingPlayer = entry.getKey();
                 playerSnake = entry.getValue();
+                break;
             }
         }
         playerSnakes.remove(changingPlayer);
@@ -212,6 +215,11 @@ public class GameBoardModel {
         playerSnakes.put(newRolePlayer, playerSnake);
         playersScore.put(newRolePlayer, newRolePlayer.getScore());
         playerSnakeDirection.put(newRolePlayer, snakeDirection);
+        return newRolePlayer;
+    }
+
+    public GameState.Snake getSnakeByPlayer(GamePlayer gamePlayer){
+        return playerSnakes.get(gamePlayer);
     }
 
     public void updatePlayerTime(InetSocketAddress playerAddress){
@@ -227,12 +235,31 @@ public class GameBoardModel {
         lastMessageTime.put(gamePlayer, System.currentTimeMillis());
     }
 
+    public void removeTimeTrackedPlayer(GamePlayer gamePlayer){
+        lastMessageTime.remove(gamePlayer);
+    }
+
     public void addFoodCoordinates(GameState.Coord coordinates){
         boardCells.get(coordinates.getY() * rows + coordinates.getX()).setBoardCellType(BoardCellType.FOOD);
     }
 
     public void emptyCell(GameState.Coord coordinates){
         boardCells.get(coordinates.getY() * rows + coordinates.getX()).setBoardCellType(BoardCellType.EMPTY);
+    }
+
+    public void addKilledSnake(GameState.Snake snake){
+        for (var entry : playerSnakes.entrySet()){
+            if (entry.getValue().equals(snake)){
+                GameState.Snake killedSnake = GameState.Snake.newBuilder()
+                        .setPlayerId(snake.getPlayerId())
+                        .addPoints(coord(-1, -1))
+                        .setState(snake.getState())
+                        .setHeadDirection(snake.getHeadDirection())
+                        .build();
+                playerSnakes.replace(entry.getKey(), killedSnake);
+                break;
+            }
+        }
     }
 
     public Set<GamePlayer> getPlayers(){
@@ -258,7 +285,13 @@ public class GameBoardModel {
     }
 
     public ArrayList<GameState.Snake> getSnakes(){
-        return new ArrayList<>(playerSnakes.values());
+        ArrayList<GameState.Snake> snakes = new ArrayList<>();
+        for (var entry : playerSnakes.entrySet()){
+            if (entry.getValue().getPointsList().size() > 1){
+                snakes.add(entry.getValue());
+            }
+        }
+        return snakes;
     }
 
     public int getRows(){
@@ -315,7 +348,8 @@ public class GameBoardModel {
     public GamePlayer getPlayerByAddress(InetSocketAddress playerAddress){
         GamePlayer gamePlayer = null;
         for (var entry : playerSnakes.entrySet()){
-            if (entry.getKey().getIpAddress().equals(playerAddress.getHostString()) && entry.getKey().getPort() == playerAddress.getPort()){
+            if (entry.getKey().getIpAddress().equals(playerAddress.getHostString()) && entry.getKey().getPort() == playerAddress.getPort()
+                    && entry.getValue().getState() == GameState.Snake.SnakeState.ALIVE){
                 gamePlayer = entry.getKey();
                 break;
             }
@@ -367,6 +401,24 @@ public class GameBoardModel {
         }
     }
 
+    public void removeSnakeDirection(GamePlayer gamePlayer){
+        playerSnakeDirection.remove(gamePlayer);
+    }
+
+    public void transformToZombie(GameState.Snake snake){
+        for (var entry : playerSnakes.entrySet()){
+            if (entry.getValue().equals(snake)){
+                GameState.Snake newSnake = GameState.Snake.newBuilder()
+                        .setPlayerId(snake.getPlayerId())
+                        .addAllPoints(snake.getPointsList())
+                        .setState(GameState.Snake.SnakeState.ZOMBIE)
+                        .setHeadDirection(snake.getHeadDirection())
+                        .build();
+                playerSnakes.replace(entry.getKey(), newSnake);
+            }
+        }
+    }
+
     public void clearPlayersScore(){
         playersScore.clear();
     }
@@ -381,5 +433,22 @@ public class GameBoardModel {
 
     public int getNumberOfPlayers(){
         return playerSnakes.size();
+    }
+
+    public int getAliveSnakesCount(){
+        int count = 0;
+        for (var entry : playerSnakes.entrySet()){
+            if (entry.getValue().getState() == GameState.Snake.SnakeState.ALIVE && entry.getValue().getPointsList().size() > 1){
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public boolean hasUnconfirmedMessages(){
+        if (receivedMessages.size() == 0){
+            return false;
+        }
+        else return true;
     }
 }

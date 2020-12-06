@@ -29,6 +29,11 @@ public class MulticastSender implements Runnable{
     public void run() {
         while (!Thread.currentThread().isInterrupted()){
             sendAnnouncementMsg();
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                break;
+            }
         }
     }
 

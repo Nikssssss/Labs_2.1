@@ -4,9 +4,7 @@ import models.GameProcess;
 import protocols.SnakeProto;
 
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetSocketAddress;
+import java.net.*;
 import java.util.Arrays;
 
 public class UnicastReceiver implements Runnable{
@@ -16,6 +14,11 @@ public class UnicastReceiver implements Runnable{
     public UnicastReceiver(DatagramSocket unicastSocket, MessageHandler messageHandler) {
         this.unicastSocket = unicastSocket;
         this.messageHandler = messageHandler;
+        try {
+            unicastSocket.setSoTimeout(2000);
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
     }
 
     public void setGameProcess(GameProcess gameProcess){
@@ -33,7 +36,8 @@ public class UnicastReceiver implements Runnable{
                 byte[] message = Arrays.copyOfRange(packet.getData(), 0, packet.getLength());
                 SnakeProto.GameMessage gameMessage = SnakeProto.GameMessage.parseFrom(message);
                 messageHandler.handle(gameMessage, new InetSocketAddress(packet.getAddress(), packet.getPort()));
-            } catch (IOException e) {
+            } catch (SocketTimeoutException ignored){ }
+            catch (IOException e) {
                 break;
             }
         }

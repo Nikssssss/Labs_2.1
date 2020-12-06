@@ -46,14 +46,12 @@ public class LobbyView extends Observable {
         availableGamesModel.addColumn("Size");
         availableGamesModel.addColumn("Food");
         availableGamesModel.addColumn("Enter");
-        availableGames.getColumn("Enter").setCellRenderer(new ButtonRenderer());
-        availableGames.getColumn("Enter").setCellEditor(new ButtonEditor(new JCheckBox()));
         availableGames.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                super.mousePressed(e);
                 if (availableGames.getSelectedColumn() == 4){
-                    notifyObservers(availableGamesModel.getDataVector().elementAt(availableGames.getSelectedRow()).elementAt(1));
+                    notifyObservers(availableGamesModel.getValueAt(availableGames.getSelectedRow(), 1));
+                    availableGames.clearSelection();
                 }
             }
         });
@@ -90,13 +88,13 @@ public class LobbyView extends Observable {
             if (availableGamesModel.getDataVector().elementAt(i).elementAt(1).equals(gameInfo.getHostID())){
                 availableGamesModel.setValueAt(new Object[]{
                         gameInfo.getHostAddress(), gameInfo.getHostID(), gameInfo.getBoardWidth() + "x" + gameInfo.getBoardHeight(),
-                        gameInfo.getFoodStatic() + "+" + gameInfo.getFoodPerPerson() + "x", "Join"}, i, 1);
+                        gameInfo.getFoodStatic() + "+" + gameInfo.getFoodPerPerson() + "x", "------->"}, i, 1);
                 return;
             }
         }
         availableGamesModel.addRow(new Object[]{
                 gameInfo.getHostAddress(), gameInfo.getHostID(), gameInfo.getBoardWidth() + "x" + gameInfo.getBoardHeight(),
-                gameInfo.getFoodStatic() + "+" + gameInfo.getFoodPerPerson() + "x", "Join"});
+                gameInfo.getFoodStatic() + "+" + gameInfo.getFoodPerPerson() + "x", "------->"});
     }
 
     public void removeAvailableGame(GameInfo gameInfo){

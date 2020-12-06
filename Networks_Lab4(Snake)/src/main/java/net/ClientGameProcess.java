@@ -1,6 +1,7 @@
 package net;
 
 import gui.GameBoardView;
+import launcher.IGameLauncher;
 import models.GameBoardModel;
 import models.GameProcess;
 import models.UnconfirmedMessage;
@@ -19,9 +20,10 @@ public class ClientGameProcess implements GameProcess {
     private UnicastReceiver unicastReceiver;
     private GameConfig gameConfig;
     private Thread unicastReceiverThread;
+    private IGameLauncher gameLauncher;
 
     public ClientGameProcess(GameBoardModel gameBoardModel, GameBoardView gameBoardView, UnicastSender unicastSender,
-                             UnicastReceiver unicastReceiver, GameConfig gameConfig, InetSocketAddress master){
+                             UnicastReceiver unicastReceiver, GameConfig gameConfig, InetSocketAddress master, IGameLauncher gameLauncher){
         this.gameBoardModel = gameBoardModel;
         this.gameBoardView = gameBoardView;
         this.unicastSender = unicastSender;
@@ -29,6 +31,7 @@ public class ClientGameProcess implements GameProcess {
         this.gameConfig = gameConfig;
         gameBoardModel.setMasterAddress(master);
         unicastReceiverThread = new Thread(unicastReceiver);
+        this.gameLauncher = gameLauncher;
     }
 
     @Override
@@ -123,6 +126,25 @@ public class ClientGameProcess implements GameProcess {
     @Override
     public void handleError(GameMessage gameMessage) {
         System.out.println(gameMessage.getError().getErrorMessage());
+    }
+
+    @Override
+    public void exit() {
+        try {
+            GameMessage sentMessage = unicastSender.sendRoleChangeMsg(NodeRole.VIEWER, null, gameBoardModel.getMasterAddress());
+            gameBoardModel.addUnconfirmedMessage(new UnconfirmedMessage(sentMessage, gameBoardModel.getMasterAddress()));
+            while (gameBoardModel.hasUnconfirmedMessages()){
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+            stop();
+            gameLauncher.enterLobby();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private List<SnakeProto.GameState.Coord> getFullCoordinatesFrom(List<SnakeProto.GameState.Coord> compressedCoordinates){

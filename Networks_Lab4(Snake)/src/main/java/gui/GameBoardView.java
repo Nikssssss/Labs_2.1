@@ -53,8 +53,8 @@ public class GameBoardView extends Observable {
         exitGameButton.setPreferredSize(new Dimension(150, 50));
         exitGameButton.addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
-                super.mouseClicked(e);
+            public void mousePressed(MouseEvent e) {
+                super.mousePressed(e);
                 notifyObservers("ExitGame");
             }
         });
@@ -121,7 +121,7 @@ public class GameBoardView extends Observable {
         int scalingConst = 16;
         scalingFactor = scalingConst * (maxCellNumber / rows);
         gameBoardPanel.setPreferredSize(new Dimension(rows * (scalingFactor / 2), columns * (scalingFactor / 2)));
-        //scalingFactor /= 2;
+        scalingFactor /= 2;
     }
 
     public void setCells(ArrayList<BoardCell> cells){

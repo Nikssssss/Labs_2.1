@@ -14,4 +14,5 @@ public interface GameProcess{
     void turnDown();
     void handleMessage(GameMessage gameMessage, InetSocketAddress sender);
     void handleError(GameMessage gameMessage);
+    void exit();
 }

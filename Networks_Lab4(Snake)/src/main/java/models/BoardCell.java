@@ -3,9 +3,9 @@ package models;
 import java.util.ArrayList;
 
 public class BoardCell {
-    private int x;
-    private int y;
-    private ArrayList<BoardCellType> boardCellTypes;
+    private final int x;
+    private final int y;
+    private final ArrayList<BoardCellType> boardCellTypes;
 
     public BoardCell(int x, int y, BoardCellType boardCellType){
         this.x = x;

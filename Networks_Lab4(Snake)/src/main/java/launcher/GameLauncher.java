@@ -52,13 +52,14 @@ public class GameLauncher implements IGameLauncher{
         statusView.addObserver(statusController);
         gameBoardView = new GameBoardView(statusView);
         multicastSender = new MulticastSender(new InetSocketAddress("239.192.0.4", 9192), unicastSocket, gameBoardModel.getPlayers());
-        gameBoardController = new GameBoardController(gameBoardView, gameBoardModel, statusController, multicastSender, unicastSender, unicastReceiver);
+        gameBoardController = new GameBoardController(gameBoardView, gameBoardModel, statusController,
+                multicastSender, unicastSender, unicastReceiver, this);
         gameBoardView.addObserver(gameBoardController);
     }
 
     @Override
     public void start(){
-        mainWindow.showPanel(lobbyController.getLobbyPanel());
+        enterLobby();
     }
 
     public void createServerGame(GameConfig gameConfig){
@@ -70,5 +71,10 @@ public class GameLauncher implements IGameLauncher{
     public void createClientGame(GameConfig gameConfig, InetSocketAddress master) {
         gameBoardController.createClientGame(gameConfig, master);
         mainWindow.showPanel(gameBoardController.getGameBoardPanel());
+    }
+
+    @Override
+    public void enterLobby() {
+        mainWindow.showPanel(lobbyController.getLobbyPanel());
     }
 }

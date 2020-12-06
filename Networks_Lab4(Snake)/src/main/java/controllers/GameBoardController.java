@@ -1,6 +1,7 @@
 package controllers;
 
 import gui.GameBoardView;
+import launcher.IGameLauncher;
 import models.GameBoardModel;
 import models.GameProcess;
 import models.ServerGameProcess;
@@ -22,15 +23,18 @@ public class GameBoardController implements Observer {
     private MulticastSender multicastSender;
     private UnicastSender unicastSender;
     private UnicastReceiver unicastReceiver;
+    private IGameLauncher gameLauncher;
 
     public GameBoardController(GameBoardView gameBoardView, GameBoardModel gameBoardModel, StatusController statusController,
-                               MulticastSender multicastSender, UnicastSender unicastSender, UnicastReceiver unicastReceiver){
+                               MulticastSender multicastSender, UnicastSender unicastSender, UnicastReceiver unicastReceiver,
+                               IGameLauncher gameLauncher){
         this.gameBoardView = gameBoardView;
         this.gameBoardModel = gameBoardModel;
         this.statusController = statusController;
         this.multicastSender = multicastSender;
         this.unicastSender = unicastSender;
         this.unicastReceiver = unicastReceiver;
+        this.gameLauncher = gameLauncher;
     }
 
     public JPanel getGameBoardPanel(){
@@ -38,14 +42,16 @@ public class GameBoardController implements Observer {
     }
 
     public void createServerGame(GameConfig gameConfig){
-        gameProcess = new ServerGameProcess(gameBoardModel, gameBoardView, multicastSender, gameConfig, unicastSender, unicastReceiver);
+        gameProcess = new ServerGameProcess(gameBoardModel, gameBoardView, multicastSender, gameConfig,
+                unicastSender, unicastReceiver, gameLauncher);
         gameProcess.createGame("Name");
         gameProcess.start();
         unicastReceiver.setGameProcess(gameProcess);
     }
 
     public void createClientGame(GameConfig gameConfig, InetSocketAddress master){
-        gameProcess = new ClientGameProcess(gameBoardModel, gameBoardView, unicastSender, unicastReceiver, gameConfig, master);
+        gameProcess = new ClientGameProcess(gameBoardModel, gameBoardView, unicastSender,
+                unicastReceiver, gameConfig, master, gameLauncher);
         gameProcess.createGame("Name");
         gameProcess.start();
         unicastReceiver.setGameProcess(gameProcess);
@@ -69,6 +75,9 @@ public class GameBoardController implements Observer {
             }
             case "PressedD" -> {
                 gameProcess.turnRight();
+            }
+            case "ExitGame" -> {
+                gameProcess.exit();
             }
         }
     }
