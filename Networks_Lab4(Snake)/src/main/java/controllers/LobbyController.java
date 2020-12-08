@@ -2,7 +2,7 @@ package controllers;
 
 import gui.LobbyView;
 import launcher.IGameLauncher;
-import models.GameInfo;
+import common.GameInfo;
 import models.LobbyModel;
 import net.MulticastReceiver;
 import observers.Observer;
@@ -51,7 +51,9 @@ public class LobbyController implements Observer {
                     .setFoodStatic(1)
                     .setFoodPerPlayer(2)
                     .setDeadFoodProb(0.3f)
-                    .setNodeTimeoutMs(2000)
+                    .setNodeTimeoutMs(5000)
+                    .setPingDelayMs(1000)
+                    .setStateDelayMs(500)
                     .build();
             gameLauncher.createServerGame(gameConfig);
         }

@@ -1,6 +1,6 @@
 package gui;
 
-import models.GameInfo;
+import common.GameInfo;
 import observers.Observable;
 
 import javax.swing.*;

@@ -1,4 +1,4 @@
-package models;
+package gameprocess;
 
 public class MsgSeqFactory {
     private long currentValue = Long.MIN_VALUE;

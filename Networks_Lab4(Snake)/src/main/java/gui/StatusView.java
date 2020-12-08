@@ -1,13 +1,12 @@
 package gui;
 
-import observers.Observable;
-
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.net.InetSocketAddress;
 
-public class StatusView extends Observable {
+public class StatusView{
     private JPanel statusPanel;
     private JTable rating;
     private JTable currentGame;
@@ -31,9 +30,9 @@ public class StatusView extends Observable {
     private void createSubComponents(){
         currentGameModel = new DefaultTableModel();
         currentGame = new JTable(currentGameModel);
-        currentGameModel.addColumn("#");
-        currentGameModel.addColumn("Name");
-        currentGameModel.addColumn("Score");
+        currentGameModel.addColumn("Host");
+        currentGameModel.addColumn("Size");
+        currentGameModel.addColumn("Food");
         currentGameScrollPane = new JScrollPane(currentGame);
         currentGameScrollPane.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(),
                 "Current Game",
@@ -42,9 +41,9 @@ public class StatusView extends Observable {
 
         ratingModel = new DefaultTableModel();
         rating = new JTable(ratingModel);
-        ratingModel.addColumn("Host");
-        ratingModel.addColumn("Size");
-        ratingModel.addColumn("Food");
+        ratingModel.addColumn("#");
+        ratingModel.addColumn("Name");
+        ratingModel.addColumn("Score");
         ratingScrollPane = new JScrollPane(rating);
         ratingScrollPane.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(),
                 "Rating",
@@ -62,5 +61,22 @@ public class StatusView extends Observable {
         constraints.gridx = 0;
         constraints.gridy = 1;
         statusPanel.add(ratingScrollPane, constraints);
+    }
+
+    public void setGameInformation(String hostName, int rows, int columns, int foodStatic, float foodPerPlayer){
+        currentGameModel.getDataVector().removeAllElements();
+        currentGameModel.addRow(new Object[] {hostName, rows + "x" + columns, foodStatic + "+" + foodPerPlayer + "x" });
+    }
+
+    public void addPlayerToRating(String name, int score){
+        ratingModel.addRow(new Object[]{ratingModel.getRowCount() + 1, name, score});
+    }
+
+    public void clearRating(){
+        ratingModel.getDataVector().removeAllElements();
+    }
+
+    public void replacePlayerScore(int number, int score){
+        ratingModel.setValueAt(score, number - 1, 2);
     }
 }

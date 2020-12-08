@@ -9,6 +9,7 @@ import gui.MainWindow;
 import gui.StatusView;
 import models.GameBoardModel;
 import models.LobbyModel;
+import models.StatusModel;
 import net.*;
 import protocols.SnakeProto.*;
 
@@ -25,6 +26,7 @@ public class GameLauncher implements IGameLauncher{
     private LobbyView lobbyView;
     private GameBoardView gameBoardView;
     private StatusView statusView;
+    private StatusModel statusModel;
     private GameBoardModel gameBoardModel;
     private LobbyModel lobbyModel;
     private MulticastSocket multicastSocket;
@@ -41,20 +43,28 @@ public class GameLauncher implements IGameLauncher{
         gameBoardModel = new GameBoardModel();
         multicastSocket = new MulticastSocket(9192);
         unicastSocket = new DatagramSocket();
-        unicastSender = new UnicastSender(unicastSocket);
+        unicastSender = new UnicastSender(unicastSocket, gameBoardModel);
         multicastReceiver = new MulticastReceiver(multicastSocket, new LobbyMessageHandler(lobbyModel));
         unicastReceiver = new UnicastReceiver(unicastSocket, new GameBoardMessageHandler(gameBoardModel, unicastSender));
         lobbyController = new LobbyController(lobbyView, lobbyModel, this, multicastReceiver);
         lobbyModel.addObserver(lobbyController);
         lobbyView.addObserver(lobbyController);
         statusView = new StatusView();
-        statusController = new StatusController(statusView);
-        statusView.addObserver(statusController);
+        statusModel = new StatusModel(gameBoardModel.getPlayersScore(), statusView);
+        statusController = new StatusController(statusView, statusModel);
         gameBoardView = new GameBoardView(statusView);
         multicastSender = new MulticastSender(new InetSocketAddress("239.192.0.4", 9192), unicastSocket, gameBoardModel.getPlayers());
         gameBoardController = new GameBoardController(gameBoardView, gameBoardModel, statusController,
                 multicastSender, unicastSender, unicastReceiver, this);
         gameBoardView.addObserver(gameBoardController);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+            @Override
+            public void run() {
+                unicastSocket.close();
+                multicastSocket.close();
+            }
+        }));
     }
 
     @Override
@@ -62,6 +72,7 @@ public class GameLauncher implements IGameLauncher{
         enterLobby();
     }
 
+    @Override
     public void createServerGame(GameConfig gameConfig){
         gameBoardController.createServerGame(gameConfig);
         mainWindow.showPanel(gameBoardController.getGameBoardPanel());
@@ -71,6 +82,11 @@ public class GameLauncher implements IGameLauncher{
     public void createClientGame(GameConfig gameConfig, InetSocketAddress master) {
         gameBoardController.createClientGame(gameConfig, master);
         mainWindow.showPanel(gameBoardController.getGameBoardPanel());
+    }
+
+    @Override
+    public void transformClientToServer(GameConfig gameConfig) {
+        gameBoardController.transformClientToServer(gameConfig);
     }
 
     @Override

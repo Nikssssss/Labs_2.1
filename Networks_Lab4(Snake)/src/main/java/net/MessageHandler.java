@@ -1,6 +1,6 @@
 package net;
 
-import models.GameProcess;
+import gameprocess.GameProcess;
 import protocols.SnakeProto.*;
 
 import java.net.InetSocketAddress;

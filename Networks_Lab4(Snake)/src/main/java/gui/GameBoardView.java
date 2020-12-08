@@ -1,6 +1,6 @@
 package gui;
 
-import models.BoardCell;
+import common.BoardCell;
 import observers.Observable;
 
 import javax.swing.*;

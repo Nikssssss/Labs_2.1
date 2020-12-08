@@ -1,6 +1,7 @@
 package net;
 
-import models.MsgSeqFactory;
+import models.GameBoardModel;
+import gameprocess.MsgSeqFactory;
 import protocols.SnakeProto.*;
 
 import java.io.IOException;
@@ -10,9 +11,11 @@ import java.net.InetSocketAddress;
 
 public class UnicastSender {
     private DatagramSocket unicastSocket;
+    private GameBoardModel gameBoardModel;
 
-    public UnicastSender(DatagramSocket unicastSocket){
+    public UnicastSender(DatagramSocket unicastSocket, GameBoardModel gameBoardModel){
         this.unicastSocket = unicastSocket;
+        this.gameBoardModel = gameBoardModel;
     }
 
     public GameMessage sendJoinMessage(String name, InetSocketAddress receiverAddress) throws IOException {
@@ -33,6 +36,7 @@ public class UnicastSender {
         GameMessage gameMessage = GameMessage.newBuilder()
                 .setMsgSeq(MsgSeqFactory.getInstance().getValue())
                 .setPing(pingMsg)
+                .setSenderId(gameBoardModel.getOwnPlayerID())
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
         return gameMessage;
@@ -45,6 +49,7 @@ public class UnicastSender {
         GameMessage gameMessage = GameMessage.newBuilder()
                 .setMsgSeq(MsgSeqFactory.getInstance().getValue())
                 .setSteer(steerMsg)
+                .setSenderId(gameBoardModel.getOwnPlayerID())
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
         return gameMessage;
@@ -56,6 +61,7 @@ public class UnicastSender {
         GameMessage gameMessage = GameMessage.newBuilder()
                 .setMsgSeq(receivedMsgSeq)
                 .setAck(ackMsg)
+                .setSenderId(gameBoardModel.getOwnPlayerID())
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
     }
@@ -67,6 +73,7 @@ public class UnicastSender {
                 .setMsgSeq(receivedMsgSeq)
                 .setReceiverId(receiverID)
                 .setAck(ackMsg)
+                .setSenderId(gameBoardModel.getOwnPlayerID())
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
     }
@@ -78,6 +85,7 @@ public class UnicastSender {
         GameMessage gameMessage = GameMessage.newBuilder()
                 .setMsgSeq(MsgSeqFactory.getInstance().getValue())
                 .setState(stateMsg)
+                .setSenderId(gameBoardModel.getOwnPlayerID())
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
         return gameMessage;
@@ -90,6 +98,7 @@ public class UnicastSender {
         GameMessage gameMessage = GameMessage.newBuilder()
                 .setMsgSeq(MsgSeqFactory.getInstance().getValue())
                 .setError(errorMsg)
+                .setSenderId(gameBoardModel.getOwnPlayerID())
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
         return gameMessage;
@@ -110,12 +119,13 @@ public class UnicastSender {
         GameMessage gameMessage = GameMessage.newBuilder()
                 .setMsgSeq(MsgSeqFactory.getInstance().getValue())
                 .setRoleChange(roleChangeMsg)
+                .setSenderId(gameBoardModel.getOwnPlayerID())
                 .build();
         sendGameMessage(gameMessage, receiverAddress);
         return gameMessage;
     }
 
-    private void sendGameMessage(GameMessage gameMessage, InetSocketAddress receiverAddress) throws IOException {
+    public void sendGameMessage(GameMessage gameMessage, InetSocketAddress receiverAddress) throws IOException {
         byte[] byteMessage = gameMessage.toByteArray();
         DatagramPacket packet = new DatagramPacket(byteMessage, byteMessage.length, receiverAddress);
         unicastSocket.send(packet);

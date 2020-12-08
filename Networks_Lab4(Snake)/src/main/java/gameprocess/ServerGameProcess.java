@@ -1,9 +1,15 @@
-package models;
+package gameprocess;
 
+import common.BoardCell;
+import common.BoardCellType;
+import common.UnconfirmedMessage;
+import controllers.StatusController;
 import exceptions.IllegalDirectionException;
 import exceptions.NoEmptyCellException;
 import gui.GameBoardView;
 import launcher.IGameLauncher;
+import models.*;
+import net.MessageTimeChecker;
 import net.MulticastSender;
 import net.UnicastReceiver;
 import net.UnicastSender;
@@ -30,6 +36,10 @@ public class ServerGameProcess implements GameProcess{
     private UnicastReceiver unicastReceiver;
     private Thread unicastReceiverThread;
     private IGameLauncher gameLauncher;
+    private MessageTimeChecker messageTimeChecker;
+    private Thread messageTimeCheckerThread;
+    private StatusController statusController;
+    private boolean isActive;
 
     private class Process implements Runnable{
         @Override
@@ -44,6 +54,12 @@ public class ServerGameProcess implements GameProcess{
                     }
                 }
                 checkCollisions();
+                statusController.updateGameRating();
+                for (var playerSnakeEntry : gameBoardModel.getPlayerSnakesSet()) {
+                    if (playerSnakeEntry.getKey().getRole() != NodeRole.VIEWER) {
+                        gameBoardModel.changePlayerScore(playerSnakeEntry.getKey(), gameBoardModel.getPlayerScore(playerSnakeEntry.getKey()));
+                    }
+                }
                 placeFood();
                 gameBoardView.setCells(gameBoardModel.getBoardCells());
                 gameBoardView.repaint();
@@ -65,7 +81,6 @@ public class ServerGameProcess implements GameProcess{
                         }
                     }
                 }
-                gameBoardModel.clearReceivedMessages();
                 try {
                     Thread.sleep(gameConfig.getStateDelayMs());
                 } catch (InterruptedException e) {
@@ -76,7 +91,7 @@ public class ServerGameProcess implements GameProcess{
     }
 
     public ServerGameProcess(GameBoardModel gameBoardModel, GameBoardView gameBoardView, MulticastSender multicastSender,
-                             GameConfig config, UnicastSender unicastSender, UnicastReceiver unicastReceiver, IGameLauncher gameLauncher) {
+                             GameConfig config, UnicastSender unicastSender, UnicastReceiver unicastReceiver, IGameLauncher gameLauncher, StatusController statusController) {
         process = new Process();
         this.gameBoardModel = gameBoardModel;
         this.gameBoardView = gameBoardView;
@@ -87,15 +102,31 @@ public class ServerGameProcess implements GameProcess{
         this.unicastReceiver = unicastReceiver;
         unicastReceiverThread = new Thread(unicastReceiver);
         this.gameLauncher = gameLauncher;
+        processThread = new Thread(process);
+        messageTimeChecker = new MessageTimeChecker(gameConfig.getNodeTimeoutMs(), gameConfig.getPingDelayMs(), gameBoardModel.getUnconfirmedMessages(),
+                gameBoardModel.getLastMessageTime(), unicastSender, this, gameBoardModel.getReceivedMessages());
+        messageTimeCheckerThread = new Thread(messageTimeChecker);
+        this.statusController = statusController;
+        this.isActive = true;
+
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+            @Override
+            public void run() {
+                if (isActive) {
+                    exit();
+                }
+            }
+        }));
     }
 
     @Override
     public void start(){
-        processThread = new Thread(process);
         processThread.start();
         multicastSender.setConfig(gameConfig);
         multicastSenderThread.start();
         unicastReceiverThread.start();
+        messageTimeCheckerThread.start();
+        statusController.setGameInformation();
     }
 
     @Override
@@ -103,31 +134,43 @@ public class ServerGameProcess implements GameProcess{
         processThread.interrupt();
         multicastSenderThread.interrupt();
         unicastReceiverThread.interrupt();
+        messageTimeCheckerThread.interrupt();
     }
 
     @Override
     public void turnLeft() {
-        gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByID(0), Direction.LEFT);
+        gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByID(gameBoardModel.getOwnPlayerID()), Direction.LEFT);
     }
 
     @Override
     public void turnRight() {
-        gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByID(0), Direction.RIGHT);
+        gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByID(gameBoardModel.getOwnPlayerID()), Direction.RIGHT);
     }
 
     @Override
     public void turnUp() {
-        gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByID(0), Direction.UP);
+        gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByID(gameBoardModel.getOwnPlayerID()), Direction.UP);
     }
 
     @Override
     public void turnDown() {
-        gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByID(0), Direction.DOWN);
+        gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByID(gameBoardModel.getOwnPlayerID()), Direction.DOWN);
     }
 
     @Override
     public void handleMessage(GameMessage gameMessage, InetSocketAddress sender) {
         if (gameMessage.hasJoin()){
+            for (var entry : gameBoardModel.getPlayerSnakesSet()){
+                if (entry.getKey().getIpAddress().equals(sender.getHostString()) && entry.getKey().getPort() == sender.getPort()
+                        && entry.getKey().getRole() != NodeRole.VIEWER){
+                    try {
+                        unicastSender.sendAckMsg(gameMessage.getMsgSeq(), sender);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    return;
+                }
+            }
             int playerID = PlayerIDFactory.getInstance().getValue();
             NodeRole nodeRole;
             if (gameBoardModel.getNumberOfPlayers() == 1){
@@ -146,19 +189,20 @@ public class ServerGameProcess implements GameProcess{
                     .build();
             try {
                 GameState.Snake snake = createSnake(playerID);
+                try {
+                    unicastSender.sendAckMsg(gameMessage.getMsgSeq(), sender, playerID);
+                    if (nodeRole == NodeRole.DEPUTY){
+                        GameMessage sentMessage = unicastSender.sendRoleChangeMsg(null, nodeRole, sender);
+                        gameBoardModel.setDeputyAddress(sender);
+                        gameBoardModel.addUnconfirmedMessage(new UnconfirmedMessage(sentMessage, sender));
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
                 gameBoardModel.addSnake(gamePlayer, snake);
                 gameBoardModel.changeSnakeDirection(gamePlayer, snake.getHeadDirection());
                 gameBoardModel.incrementPlayerScore(gamePlayer);
                 gameBoardModel.addTimeTrackedPlayer(gamePlayer);
-                try {
-                    unicastSender.sendAckMsg(gameMessage.getMsgSeq(), sender, playerID);
-//                    if (nodeRole == NodeRole.DEPUTY){
-//                        GameMessage sentMessage = unicastSender.sendRoleChangeMsg(null, nodeRole, sender);
-//                        gameBoardModel.addUnconfirmedMessage(new UnconfirmedMessage(sentMessage, sender));
-//                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
             } catch (NoEmptyCellException e) {
                 try {
                     GameMessage sentMessage = unicastSender.sendErrorMsg("No Empty Cell", sender);
@@ -170,16 +214,20 @@ public class ServerGameProcess implements GameProcess{
         }
         else if (gameMessage.hasRoleChange()){
             GamePlayer gamePlayer = gameBoardModel.getPlayerByAddress(sender);
-            GamePlayer newRolePlayer = gameBoardModel.changePlayerRole(gamePlayer, NodeRole.VIEWER);
-            GameState.Snake playerSnake = gameBoardModel.getSnakeByPlayer(newRolePlayer);
-            if (playerSnake.getPointsList().size() == 1){
-                gameBoardModel.removeSnake(playerSnake);
-                gameBoardModel.removeSnakeDirection(newRolePlayer);
-                gameBoardModel.removeTimeTrackedPlayer(newRolePlayer);
-            }
-            else {
-                gameBoardModel.transformToZombie(playerSnake);
-            }
+            makePlayerViewer(gamePlayer);
+        }
+    }
+
+    private void makePlayerViewer(GamePlayer gamePlayer){
+        GamePlayer newRolePlayer = gameBoardModel.changePlayerRole(gamePlayer, NodeRole.VIEWER);
+        GameState.Snake playerSnake = gameBoardModel.getSnakeByPlayer(newRolePlayer);
+        if (playerSnake.getPointsList().size() == 1){
+            gameBoardModel.removeSnake(playerSnake);
+            gameBoardModel.removeSnakeDirection(newRolePlayer);
+            gameBoardModel.removeTimeTrackedPlayer(newRolePlayer);
+        }
+        else {
+            gameBoardModel.transformToZombie(playerSnake);
         }
     }
 
@@ -189,8 +237,52 @@ public class ServerGameProcess implements GameProcess{
     }
 
     @Override
-    public void exit() {
+    public void handlePlayerDeath(GamePlayer gamePlayer) {
+        switch (gamePlayer.getRole()){
+            case DEPUTY -> {
+                for (var entry : gameBoardModel.getPlayers()){
+                    if (entry.getRole() == NodeRole.NORMAL){
+                        try {
+                            unicastSender.sendRoleChangeMsg(null, NodeRole.DEPUTY, new InetSocketAddress(entry.getIpAddress(), entry.getPort()));
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                        gameBoardModel.changePlayerRole(entry, NodeRole.DEPUTY);
+                        gameBoardModel.setDeputyAddress(new InetSocketAddress(entry.getIpAddress(), entry.getPort()));
+                        makePlayerViewer(gamePlayer);
+                        gameBoardModel.removeUnconfirmedMessagesBy(gamePlayer);
+                        return;
+                    }
+                }
+                makePlayerViewer(gamePlayer);
+                gameBoardModel.removeUnconfirmedMessagesBy(gamePlayer);
+                gameBoardModel.setDeputyAddress(null);
+            }
+            case NORMAL -> {
+                makePlayerViewer(gamePlayer);
+                gameBoardModel.removeUnconfirmedMessagesBy(gamePlayer);
+            }
+        }
+    }
 
+    @Override
+    public void exit() {
+        isActive = false;
+        stop();
+        gameBoardModel.clearUnconfirmedMessages();
+        if (gameBoardModel.getDeputyAddress() != null) {
+            try {
+                unicastSender.sendRoleChangeMsg(null, NodeRole.MASTER, gameBoardModel.getDeputyAddress());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        gameLauncher.enterLobby();
+        gameBoardModel.clearAllPlayers();
+        gameBoardModel.clearReceivedMessages();
+        gameBoardModel.clearPlayersScore();
+        gameBoardModel.clearBoardCells();
+        gameBoardModel.clearLastMessageTime();
     }
 
     @Override
@@ -198,24 +290,11 @@ public class ServerGameProcess implements GameProcess{
         gameBoardModel.createBoard(gameConfig.getWidth(), gameConfig.getHeight());
         gameBoardView.setGameBoardSize(gameConfig.getWidth(), gameConfig.getHeight());
         gameBoardView.setCells(gameBoardModel.getBoardCells());
-        GameState.Snake snake = null;
-//        try {
-//            snake = createSnake();
-//            gameBoardModel.addSnake(snake);
-//            gameBoardModel.changeSnakeDirection(snake.getPlayerId(), snake.getHeadDirection());
-//        } catch (NoEmptyCellException e) {
-//            e.printStackTrace();
-//        }
         int playerID = PlayerIDFactory.getInstance().getValue();
-        snake = GameState.Snake.newBuilder()
-                .setPlayerId(playerID)
-                .setHeadDirection(Direction.UP)
-                .setState(GameState.Snake.SnakeState.ALIVE)
-                .addPoints(coord(5, 5))
-                .addPoints(coord(3,0))
-                .addPoints(coord(0, 3))
-                .addPoints(coord(5, 0))
-                .build();
+        GameState.Snake snake = null;
+        try {
+            snake = createSnake(playerID);
+        } catch (NoEmptyCellException ignored) {}
         GamePlayer gamePlayer = GamePlayer.newBuilder()
                 .setName(name)
                 .setId(playerID)
@@ -266,6 +345,9 @@ public class ServerGameProcess implements GameProcess{
         List<GameState.Coord> fullNewCoordinates = new LinkedList<>();
         if (!gameBoardModel.isFoodCell(newHeadCoordinates.getX(), newHeadCoordinates.getY())){
             fullOldCoordinates.remove(fullOldCoordinates.size() - 1);
+        }
+        else {
+            gameBoardModel.incrementPlayerScore(gameBoardModel.getPlayerBySnake(snake));
         }
         fullNewCoordinates.add(newHeadCoordinates);
         fullNewCoordinates.addAll(fullOldCoordinates);
@@ -433,7 +515,7 @@ public class ServerGameProcess implements GameProcess{
                             for (int i = 1; i < fullSnakeCoords.size(); i++) {
                                 deadSnakesCoordinates.add(fullSnakeCoords.get(i));
                             }
-                            //TODO add point to player
+                            gameBoardModel.incrementPlayerScore(gameBoardModel.getPlayerBySnake(snake));
                             deadSnakes.add(snake);
                         }
                     }
@@ -448,7 +530,7 @@ public class ServerGameProcess implements GameProcess{
                             }
                             deadSnakes.add(snake);
                         } else if (getFullCoordinatesFrom(snake.getPointsList()).contains(coord(cell.getX(), cell.getY()))) {
-                            //TODO add point to player
+                            gameBoardModel.incrementPlayerScore(gameBoardModel.getPlayerBySnake(snake));
                             BoardCellType boardCellType;
                             if (snake.getPlayerId() == gameBoardModel.getOwnPlayerID()){
                                 boardCellType = BoardCellType.OWN_BODY;
@@ -457,7 +539,6 @@ public class ServerGameProcess implements GameProcess{
                                 boardCellType = BoardCellType.ENEMY_BODY;
                             }
                             gameBoardModel.setCellType(coord(cell.getX(), cell.getY()), boardCellType);
-                            System.out.println(snake.getPlayerId() + " has earned 1 point");
                         }
                     }
                 }
@@ -476,8 +557,8 @@ public class ServerGameProcess implements GameProcess{
         }
         if (deadSnakes.size() > 0) {
             checkViewersSnakes();
+            checkGameEnding();
         }
-        //TODO check ending of a game (if playerSnakes.size() <= 4 && these players snakes have 1 coordinate)
     }
 
     private void checkViewersSnakes(){
@@ -486,11 +567,19 @@ public class ServerGameProcess implements GameProcess{
                     && playerSnakeEntry.getValue().getState().equals(GameState.Snake.SnakeState.ZOMBIE)
                     && playerSnakeEntry.getValue().getPointsList().size() == 1;
             if (deleteCondition) {
-                gameBoardModel.removeTimeTrackedPlayer(playerSnakeEntry.getKey());
                 gameBoardModel.removeSnakeDirection(playerSnakeEntry.getKey());
+                gameBoardModel.removeTimeTrackedPlayer(playerSnakeEntry.getKey());
+                gameBoardModel.removeUnconfirmedMessagesBy(playerSnakeEntry.getKey());
             }
             return deleteCondition;
         });
+    }
+
+    private void checkGameEnding(){
+        if (!gameBoardModel.hasSnakesOnBoard()){
+            stop();
+            gameLauncher.enterLobby();
+        }
     }
 
     private void placeFood(){

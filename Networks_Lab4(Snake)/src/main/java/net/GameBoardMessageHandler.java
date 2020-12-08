@@ -1,9 +1,9 @@
 package net;
 
 import models.GameBoardModel;
-import models.GameProcess;
-import models.UnconfirmedMessage;
-import protocols.SnakeProto;
+import gameprocess.GameProcess;
+import common.UnconfirmedMessage;
+import protocols.SnakeProto.*;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -23,34 +23,54 @@ public class GameBoardMessageHandler implements MessageHandler{
     }
 
     @Override
-    public void handle(SnakeProto.GameMessage gameMessage, InetSocketAddress sender) {
+    public void handle(GameMessage gameMessage, InetSocketAddress sender) {
         try {
             if (gameMessage.hasPing()) {
-                gameBoardModel.updatePlayerTime(sender);
+                if (gameBoardModel.getDeputyAddress() == null){
+                    gameBoardModel.setDeputyAddress(sender);
+                    GameMessage sentMessage = unicastSender.sendRoleChangeMsg(null, NodeRole.DEPUTY, sender);
+                    gameBoardModel.addUnconfirmedMessage(new UnconfirmedMessage(sentMessage, sender));
+                    gameBoardModel.changePlayerRole(gameBoardModel.getPlayerByAddress(sender), NodeRole.DEPUTY);
+                }
+                gameBoardModel.updatePlayerTime(gameMessage.getSenderId());
                 unicastSender.sendAckMsg(gameMessage.getMsgSeq(), sender);
+                gameBoardModel.setLastSendTime(System.currentTimeMillis());
             } else if (gameMessage.hasSteer()) {
-                if (gameBoardModel.addReceivedMessage(gameBoardModel.getPlayerByAddress(sender), gameMessage)) {
+                if (gameBoardModel.addReceivedMessage(gameMessage.getSenderId(), gameMessage)) {
+                    if (gameBoardModel.getDeputyAddress() == null) {
+                        gameBoardModel.setDeputyAddress(sender);
+                        GameMessage sentMessage = unicastSender.sendRoleChangeMsg(null, NodeRole.DEPUTY, sender);
+                        gameBoardModel.addUnconfirmedMessage(new UnconfirmedMessage(sentMessage, sender));
+                        gameBoardModel.changePlayerRole(gameBoardModel.getPlayerByAddress(sender), NodeRole.DEPUTY);
+                    }
                     gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerByAddress(sender), gameMessage.getSteer().getDirection());
                 }
                 unicastSender.sendAckMsg(gameMessage.getMsgSeq(), sender);
+                gameBoardModel.setLastSendTime(System.currentTimeMillis());
+                gameBoardModel.updatePlayerTime(gameMessage.getSenderId());
             } else if (gameMessage.hasAck()) {
-                gameBoardModel.removeUnconfirmedMessage(new UnconfirmedMessage(gameMessage, sender));
+                gameBoardModel.removeUnconfirmedMessage(gameMessage.getMsgSeq());
                 if (gameMessage.hasReceiverId()) {
                     gameBoardModel.setOwnPlayerID(gameMessage.getReceiverId());
                 }
+                else if (gameMessage.hasSenderId()){
+                    gameBoardModel.updatePlayerTime(gameMessage.getSenderId());
+                }
             } else if (gameMessage.hasState()) {
-                if (gameBoardModel.addReceivedMessage(gameBoardModel.getPlayerByAddress(sender), gameMessage)) {
+                if (gameBoardModel.addReceivedMessage(gameMessage.getSenderId(), gameMessage)) {
                     gameProcess.handleMessage(gameMessage, sender);
                 }
                 unicastSender.sendAckMsg(gameMessage.getMsgSeq(), sender);
+                gameBoardModel.setLastSendTime(System.currentTimeMillis());
+                gameBoardModel.updatePlayerTime(gameMessage.getSenderId());
             } else if (gameMessage.hasJoin()) {
                 gameProcess.handleMessage(gameMessage, sender);
             } else if (gameMessage.hasError()) {
                 gameProcess.handleError(gameMessage);
                 unicastSender.sendAckMsg(gameMessage.getMsgSeq(), sender);
             } else if (gameMessage.hasRoleChange()) {
-                gameProcess.handleMessage(gameMessage, sender);
                 unicastSender.sendAckMsg(gameMessage.getMsgSeq(), sender);
+                gameProcess.handleMessage(gameMessage, sender);
             }
         } catch (IOException e){
             e.printStackTrace();

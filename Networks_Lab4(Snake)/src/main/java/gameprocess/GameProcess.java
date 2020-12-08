@@ -1,4 +1,4 @@
-package models;
+package gameprocess;
 
 import protocols.SnakeProto.*;
 
@@ -14,5 +14,6 @@ public interface GameProcess{
     void turnDown();
     void handleMessage(GameMessage gameMessage, InetSocketAddress sender);
     void handleError(GameMessage gameMessage);
+    void handlePlayerDeath(GamePlayer gamePlayer);
     void exit();
 }

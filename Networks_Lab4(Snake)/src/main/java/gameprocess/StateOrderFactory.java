@@ -1,4 +1,4 @@
-package models;
+package gameprocess;
 
 public class StateOrderFactory {
     private int currentValue = 0;

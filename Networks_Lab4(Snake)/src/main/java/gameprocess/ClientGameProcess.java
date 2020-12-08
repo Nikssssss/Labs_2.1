@@ -1,10 +1,14 @@
-package net;
+package gameprocess;
 
+import controllers.StatusController;
 import gui.GameBoardView;
 import launcher.IGameLauncher;
 import models.GameBoardModel;
-import models.GameProcess;
-import models.UnconfirmedMessage;
+import net.MessageTimeChecker;
+import common.UnconfirmedMessage;
+import net.PingSender;
+import net.UnicastReceiver;
+import net.UnicastSender;
 import protocols.SnakeProto;
 import protocols.SnakeProto.*;
 
@@ -21,9 +25,16 @@ public class ClientGameProcess implements GameProcess {
     private GameConfig gameConfig;
     private Thread unicastReceiverThread;
     private IGameLauncher gameLauncher;
+    private MessageTimeChecker messageTimeChecker;
+    private Thread messageTimeCheckerThread;
+    private PingSender pingSender;
+    private Thread pingSenderThread;
+    private StatusController statusController;
+    private boolean isActive;
+    private String name;
 
     public ClientGameProcess(GameBoardModel gameBoardModel, GameBoardView gameBoardView, UnicastSender unicastSender,
-                             UnicastReceiver unicastReceiver, GameConfig gameConfig, InetSocketAddress master, IGameLauncher gameLauncher){
+                             UnicastReceiver unicastReceiver, GameConfig gameConfig, InetSocketAddress master, IGameLauncher gameLauncher, StatusController statusController){
         this.gameBoardModel = gameBoardModel;
         this.gameBoardView = gameBoardView;
         this.unicastSender = unicastSender;
@@ -32,6 +43,22 @@ public class ClientGameProcess implements GameProcess {
         gameBoardModel.setMasterAddress(master);
         unicastReceiverThread = new Thread(unicastReceiver);
         this.gameLauncher = gameLauncher;
+        messageTimeChecker = new MessageTimeChecker(gameConfig.getNodeTimeoutMs(), gameConfig.getPingDelayMs(), gameBoardModel.getUnconfirmedMessages(),
+                gameBoardModel.getLastMessageTime(), unicastSender, this, gameBoardModel.getReceivedMessages());
+        messageTimeCheckerThread = new Thread(messageTimeChecker);
+        pingSender = new PingSender(gameConfig.getPingDelayMs(), unicastSender, gameBoardModel.getMasterAddress(), gameBoardModel);
+        pingSenderThread = new Thread(pingSender);
+        this.statusController = statusController;
+        this.isActive = true;
+
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+            @Override
+            public void run() {
+                if (isActive) {
+                    exit();
+                }
+            }
+        }));
     }
 
     @Override
@@ -39,22 +66,31 @@ public class ClientGameProcess implements GameProcess {
         gameBoardModel.createBoard(gameConfig.getWidth(), gameConfig.getHeight());
         gameBoardView.setGameBoardSize(gameConfig.getWidth(), gameConfig.getHeight());
         gameBoardView.setCells(gameBoardModel.getBoardCells());
+        this.name = name;
+        statusController.setGameInformation();
     }
 
     @Override
     public void start() {
         unicastReceiverThread.start();
         try {
-            GameMessage sentMessage = unicastSender.sendJoinMessage("name", gameBoardModel.getMasterAddress());
+            GameMessage sentMessage = unicastSender.sendJoinMessage(name, gameBoardModel.getMasterAddress());
             gameBoardModel.addUnconfirmedMessage(new UnconfirmedMessage(sentMessage, gameBoardModel.getMasterAddress()));
         } catch (IOException e) {
             e.printStackTrace();
         }
+        messageTimeCheckerThread.start();
+        pingSenderThread.start();
     }
 
     @Override
     public void stop() {
         unicastReceiverThread.interrupt();
+        messageTimeCheckerThread.interrupt();
+        pingSenderThread.interrupt();
+        gameBoardModel.clearUnconfirmedMessages();
+        gameBoardModel.clearLastMessageTime();
+        gameBoardModel.clearReceivedMessages();
     }
 
     @Override
@@ -103,6 +139,7 @@ public class ClientGameProcess implements GameProcess {
             gameBoardModel.clearBoardCells();
             gameBoardModel.clearPlayersScore();
             gameBoardModel.clearReceivedMessages();
+            gameBoardModel.clearAllPlayers();
             List<GameState.Snake> snakes = gameMessage.getState().getState().getSnakesList();
             List<GameState.Coord> foods = gameMessage.getState().getState().getFoodsList();
             List<GamePlayer> players = gameMessage.getState().getState().getPlayers().getPlayersList();
@@ -115,36 +152,123 @@ public class ClientGameProcess implements GameProcess {
                     gameBoardModel.addEnemySnakeCoordinates(getFullCoordinatesFrom(snake.getPointsList()));
                 }
             }
+            for (var player : players){
+                int playerID = player.getId();
+                for (var snake : snakes){
+                    if (snake.getPlayerId() == playerID){
+                        gameBoardModel.addSnake(player, snake);
+                        break;
+                    }
+                }
+                gameBoardModel.addPlayerScore(player);
+            }
             gameBoardModel.addAllFoodCoordinates(foods);
-            gameBoardModel.addAllPlayersScore(players);
             this.gameConfig = config;
             gameBoardView.setCells(gameBoardModel.getBoardCells());
             gameBoardView.repaint();
+            statusController.setPlayersScore(gameBoardModel.getPlayersScore());
+            statusController.updateGameRating();
+        }
+        else if (gameMessage.hasRoleChange()){
+            GameMessage.RoleChangeMsg roleChangeMsg = gameMessage.getRoleChange();
+            if (roleChangeMsg.hasReceiverRole()){
+                switch (roleChangeMsg.getReceiverRole()){
+                    case DEPUTY -> {
+                        gameBoardModel.setDeputyState(true);
+                    }
+                    case MASTER -> {
+                        transformToServerProcess(sender);
+                    }
+                }
+            } else if (roleChangeMsg.hasSenderRole()) {
+                if (roleChangeMsg.getSenderRole().equals(NodeRole.MASTER)) {
+                    if (gameBoardModel.getPlayerByAddress(gameBoardModel.getMasterAddress()) == null){
+                        gameBoardModel.removeTimeTrackedPlayer(gameBoardModel.getPlayerByAddress("", 0));
+                        gameBoardModel.removeUnconfirmedMessagesBy(gameBoardModel.getPlayerByAddress("", 0));
+                    }
+                    else {
+                        gameBoardModel.removeTimeTrackedPlayer(gameBoardModel.getPlayerByAddress(gameBoardModel.getMasterAddress()));
+                        gameBoardModel.removeUnconfirmedMessagesBy(gameBoardModel.getPlayerByAddress(gameBoardModel.getMasterAddress()));
+                    }
+                    gameBoardModel.setMasterAddress(sender);
+                }
+            }
+            gameBoardModel.setLastSendTime(System.currentTimeMillis());
         }
     }
 
     @Override
     public void handleError(GameMessage gameMessage) {
         System.out.println(gameMessage.getError().getErrorMessage());
+        stop();
+        exit();
+        gameLauncher.enterLobby();
+    }
+
+    @Override
+    public void handlePlayerDeath(GamePlayer gamePlayer) {
+        if (gamePlayer.getRole() == NodeRole.MASTER) {
+            if (gameBoardModel.isDeputy()) {
+                transformToServerProcess(gameBoardModel.getMasterAddress());
+            } else {
+                for (var player : gameBoardModel.getPlayers()) {
+                    if (player.getRole() == NodeRole.DEPUTY) {
+                        gameBoardModel.setMasterAddress(new InetSocketAddress(player.getIpAddress(), player.getPort()));
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     @Override
     public void exit() {
+        isActive = false;
+        stop();
+        gameBoardModel.clearUnconfirmedMessages();
         try {
-            GameMessage sentMessage = unicastSender.sendRoleChangeMsg(NodeRole.VIEWER, null, gameBoardModel.getMasterAddress());
-            gameBoardModel.addUnconfirmedMessage(new UnconfirmedMessage(sentMessage, gameBoardModel.getMasterAddress()));
-            while (gameBoardModel.hasUnconfirmedMessages()){
-                try {
-                    Thread.sleep(500);
-                } catch (InterruptedException e) {
-                    break;
-                }
-            }
-            stop();
-            gameLauncher.enterLobby();
+            unicastSender.sendRoleChangeMsg(NodeRole.VIEWER, null, gameBoardModel.getMasterAddress());
         } catch (IOException e) {
             e.printStackTrace();
         }
+        gameLauncher.enterLobby();
+        gameBoardModel.clearAllPlayers();
+        gameBoardModel.clearReceivedMessages();
+        gameBoardModel.clearPlayersScore();
+        gameBoardModel.clearBoardCells();
+        gameBoardModel.clearLastMessageTime();
+    }
+
+    public void transformToServerProcess(InetSocketAddress exMaster){
+        stop();
+        for (var snake : gameBoardModel.getSnakes()){
+            gameBoardModel.changeSnakeDirection(gameBoardModel.getPlayerBySnake(snake), snake.getHeadDirection());
+        }
+        GamePlayer gamePlayer = gameBoardModel.getPlayerByAddress(exMaster);
+        if (gamePlayer == null){
+            gamePlayer = gameBoardModel.getPlayerByAddress("", 0);
+        }
+        GamePlayer newRolePlayer = gameBoardModel.changePlayerRole(gamePlayer, NodeRole.VIEWER);
+        GameState.Snake playerSnake = gameBoardModel.getSnakeByPlayer(newRolePlayer);
+        if (playerSnake.getPointsList().size() == 1){
+            gameBoardModel.removeSnake(playerSnake);
+            gameBoardModel.removeSnakeDirection(newRolePlayer);
+            gameBoardModel.removeTimeTrackedPlayer(newRolePlayer);
+        }
+        else {
+            gameBoardModel.transformToZombie(playerSnake);
+        }
+        for (var entry : gameBoardModel.getPlayerSnakesSet()){
+            if (entry.getKey().getId() != gameBoardModel.getOwnPlayerID() && entry.getKey().getRole() != NodeRole.VIEWER){
+                try {
+                    unicastSender.sendRoleChangeMsg(NodeRole.MASTER, null, new InetSocketAddress(entry.getKey().getIpAddress(), entry.getKey().getPort()));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        gameBoardModel.changePlayerRole(gameBoardModel.getPlayerByID(gameBoardModel.getOwnPlayerID()), NodeRole.MASTER);
+        gameLauncher.transformClientToServer(gameConfig);
     }
 
     private List<SnakeProto.GameState.Coord> getFullCoordinatesFrom(List<SnakeProto.GameState.Coord> compressedCoordinates){

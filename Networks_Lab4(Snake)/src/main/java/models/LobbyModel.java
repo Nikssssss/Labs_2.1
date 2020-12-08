@@ -1,5 +1,6 @@
 package models;
 
+import common.GameInfo;
 import observers.Observable;
 import protocols.SnakeProto.*;
 

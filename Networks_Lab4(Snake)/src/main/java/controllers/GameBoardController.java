@@ -3,9 +3,9 @@ package controllers;
 import gui.GameBoardView;
 import launcher.IGameLauncher;
 import models.GameBoardModel;
-import models.GameProcess;
-import models.ServerGameProcess;
-import net.ClientGameProcess;
+import gameprocess.GameProcess;
+import gameprocess.ServerGameProcess;
+import gameprocess.ClientGameProcess;
 import net.MulticastSender;
 import net.UnicastReceiver;
 import net.UnicastSender;
@@ -24,6 +24,7 @@ public class GameBoardController implements Observer {
     private UnicastSender unicastSender;
     private UnicastReceiver unicastReceiver;
     private IGameLauncher gameLauncher;
+    private final String name = "Nikita";
 
     public GameBoardController(GameBoardView gameBoardView, GameBoardModel gameBoardModel, StatusController statusController,
                                MulticastSender multicastSender, UnicastSender unicastSender, UnicastReceiver unicastReceiver,
@@ -42,23 +43,34 @@ public class GameBoardController implements Observer {
     }
 
     public void createServerGame(GameConfig gameConfig){
+        statusController.setPlayersScore(gameBoardModel.getPlayersScore());
+        statusController.setGameConfig(gameConfig);
+        statusController.setHostName(name);
         gameProcess = new ServerGameProcess(gameBoardModel, gameBoardView, multicastSender, gameConfig,
-                unicastSender, unicastReceiver, gameLauncher);
-        gameProcess.createGame("Name");
-        gameProcess.start();
+                unicastSender, unicastReceiver, gameLauncher, statusController);
         unicastReceiver.setGameProcess(gameProcess);
+        gameProcess.createGame(name);
+        gameProcess.start();
+    }
+
+    public void transformClientToServer(GameConfig gameConfig){
+        statusController.setGameConfig(gameConfig);
+        statusController.setHostName(name);
+        gameProcess = new ServerGameProcess(gameBoardModel, gameBoardView, multicastSender, gameConfig,
+                unicastSender, unicastReceiver, gameLauncher, statusController);
+        unicastReceiver.setGameProcess(gameProcess);
+        gameProcess.start();
     }
 
     public void createClientGame(GameConfig gameConfig, InetSocketAddress master){
+        statusController.setHostName(master.getHostString());
+        statusController.setGameConfig(gameConfig);
+        statusController.setPlayersScore(gameBoardModel.getPlayersScore());
         gameProcess = new ClientGameProcess(gameBoardModel, gameBoardView, unicastSender,
-                unicastReceiver, gameConfig, master, gameLauncher);
-        gameProcess.createGame("Name");
-        gameProcess.start();
+                unicastReceiver, gameConfig, master, gameLauncher, statusController);
         unicastReceiver.setGameProcess(gameProcess);
-    }
-
-    private GameState.Coord coord(int x, int y) {
-        return GameState.Coord.newBuilder().setX(x).setY(y).build();
+        gameProcess.createGame(name);
+        gameProcess.start();
     }
 
     @Override

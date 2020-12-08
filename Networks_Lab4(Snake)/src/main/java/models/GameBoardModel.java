@@ -1,5 +1,8 @@
 package models;
 
+import common.BoardCell;
+import common.BoardCellType;
+import common.UnconfirmedMessage;
 import exceptions.NoEmptyCellException;
 import protocols.SnakeProto.*;
 
@@ -11,24 +14,26 @@ public class GameBoardModel {
     private int rows;
     private int columns;
     private ArrayList<BoardCell> boardCells;
-    private HashMap<GamePlayer, GameState.Snake> playerSnakes;
+    private ConcurrentHashMap<GamePlayer, GameState.Snake> playerSnakes;
     private ConcurrentHashMap<GamePlayer, Direction> playerSnakeDirection;
-    private HashMap<GamePlayer, Integer> playersScore;
-    private HashMap<GamePlayer, Long> lastMessageTime;
-    private HashMap<UnconfirmedMessage, Long> unconfirmedMessages;
-    private HashMap<GamePlayer, GameMessage> receivedMessages;
+    private ConcurrentHashMap<GamePlayer, Long> lastMessageTime;
+    private ConcurrentHashMap<GamePlayer, Integer> playersScore;
+    private ConcurrentHashMap<UnconfirmedMessage, Long> unconfirmedMessages;
+    private ConcurrentHashMap<Integer, GameMessage> receivedMessages;
     private InetSocketAddress masterAddress;
     private InetSocketAddress deputyAddress;
+    private boolean isDeputy;
     private int ownPlayerID;
+    private long lastSendTime;
 
     public GameBoardModel(){
         boardCells = new ArrayList<>();
-        playerSnakes = new HashMap<>();
-        playersScore = new HashMap<>();
+        playerSnakes = new ConcurrentHashMap<>();
+        playersScore = new ConcurrentHashMap<>();
         playerSnakeDirection = new ConcurrentHashMap<>();
-        lastMessageTime = new HashMap<>();
-        unconfirmedMessages = new HashMap<>();
-        receivedMessages = new HashMap<>();
+        lastMessageTime = new ConcurrentHashMap<>();
+        unconfirmedMessages = new ConcurrentHashMap<>();
+        receivedMessages = new ConcurrentHashMap<>();
     }
 
     public void createBoard(int rows, int columns){
@@ -41,6 +46,22 @@ public class GameBoardModel {
         }
     }
 
+    public void setDeputyState(boolean state){
+        this.isDeputy = state;
+    }
+
+    public boolean isDeputy(){
+        return isDeputy;
+    }
+
+    public void setDeputyAddress(InetSocketAddress deputyAddress){
+        this.deputyAddress = deputyAddress;
+    }
+
+    public InetSocketAddress getDeputyAddress(){
+        return deputyAddress;
+    }
+
     public void clearSnakeCells(){
         for (int i = 0; i < rows; i++){
             for (int j = 0; j < columns; j++){
@@ -50,6 +71,10 @@ public class GameBoardModel {
                 }
             }
         }
+    }
+
+    public ConcurrentHashMap<Integer, GameMessage> getReceivedMessages(){
+        return receivedMessages;
     }
 
     public GameState.Coord getFreeCell() throws NoEmptyCellException {
@@ -139,6 +164,19 @@ public class GameBoardModel {
         }
     }
 
+    public void clearUnconfirmedMessages(){
+        unconfirmedMessages.clear();
+    }
+
+    public void clearLastMessageTime(){
+        lastMessageTime.clear();
+    }
+
+    public void removeUnconfirmedMessagesBy(GamePlayer gamePlayer){
+        unconfirmedMessages.entrySet().removeIf(entry ->
+                entry.getKey().getReceiver().getHostString().equals(gamePlayer.getIpAddress()) && entry.getKey().getReceiver().getPort() == gamePlayer.getPort());
+    }
+
     public void setCellType(GameState.Coord cell, BoardCellType boardCellType){
         boardCells.get(cell.getY() * rows + cell.getX()).setBoardCellType(boardCellType);
     }
@@ -147,36 +185,42 @@ public class GameBoardModel {
         unconfirmedMessages.put(unconfirmedMessage, System.currentTimeMillis());
     }
 
-    public void removeUnconfirmedMessage(UnconfirmedMessage unconfirmedMessage){
-        unconfirmedMessages.remove(unconfirmedMessage);
+    public void removeUnconfirmedMessage(long msgSeq){
+        unconfirmedMessages.entrySet().removeIf(message -> message.getKey().getGameMessage().getMsgSeq() == msgSeq);
     }
 
-    public void updateUnconfirmedMessage(UnconfirmedMessage unconfirmedMessage){
-        unconfirmedMessages.replace(unconfirmedMessage, System.currentTimeMillis());
-    }
-
-    public boolean addReceivedMessage(GamePlayer gamePlayer, GameMessage gameMessage){
-        for (var entry : receivedMessages.entrySet()){
-            if (entry.getKey().equals(gamePlayer)){
+    public boolean addReceivedMessage(Integer playerID, GameMessage gameMessage){
+        for (var entry : receivedMessages.entrySet()) {
+            if (entry.getKey().equals(playerID)) {
                 GameMessage currentMessage = entry.getValue();
-                if (currentMessage.hasSteer() && gameMessage.hasSteer()){
-                    if (currentMessage.getMsgSeq() < gameMessage.getMsgSeq()){
-                        receivedMessages.replace(gamePlayer, gameMessage);
+                if (currentMessage.hasSteer() && gameMessage.hasSteer()) {
+                    if (currentMessage.getMsgSeq() < gameMessage.getMsgSeq()) {
+                        receivedMessages.replace(playerID, gameMessage);
                         return true;
-                    }
-                    else return false;
-                }
-                else if (currentMessage.hasState() && gameMessage.hasState()){
-                    if (currentMessage.getMsgSeq() < gameMessage.getMsgSeq()){
-                        receivedMessages.replace(gamePlayer, gameMessage);
+                    } else return false;
+                } else if (currentMessage.hasState() && gameMessage.hasState()) {
+                    if (currentMessage.getMsgSeq() < gameMessage.getMsgSeq()) {
+                        receivedMessages.replace(playerID, gameMessage);
                         return true;
-                    }
-                    else return false;
+                    } else return false;
+                } else if (currentMessage.hasJoin() && gameMessage.hasJoin()){
+                    if (currentMessage.getMsgSeq() < gameMessage.getMsgSeq()) {
+                        receivedMessages.replace(playerID, gameMessage);
+                        return true;
+                    } else return false;
                 }
             }
         }
-        receivedMessages.put(gamePlayer, gameMessage);
+        receivedMessages.put(playerID, gameMessage);
         return true;
+    }
+
+    public long getLastSendTime(){
+        return lastSendTime;
+    }
+
+    public void setLastSendTime(long lastSendTime){
+        this.lastSendTime = lastSendTime;
     }
 
     public void addAllFoodCoordinates(List<GameState.Coord> coordinates){
@@ -200,9 +244,9 @@ public class GameBoardModel {
             }
         }
         playerSnakes.remove(changingPlayer);
-        playersScore.remove(changingPlayer);
         Direction snakeDirection = playerSnakeDirection.get(changingPlayer);
         playerSnakeDirection.remove(changingPlayer);
+        playersScore.remove(changingPlayer);
         lastMessageTime.remove(changingPlayer);
         GamePlayer newRolePlayer = GamePlayer.newBuilder()
                 .setName(changingPlayer.getName())
@@ -213,20 +257,77 @@ public class GameBoardModel {
                 .setScore(changingPlayer.getScore())
                 .build();
         playerSnakes.put(newRolePlayer, playerSnake);
-        playersScore.put(newRolePlayer, newRolePlayer.getScore());
         playerSnakeDirection.put(newRolePlayer, snakeDirection);
+        playersScore.put(newRolePlayer, newRolePlayer.getScore());
+        lastMessageTime.put(newRolePlayer, System.currentTimeMillis());
         return newRolePlayer;
+    }
+
+    public GamePlayer changePlayerScore(GamePlayer gamePlayer, int score){
+        GamePlayer changingPlayer = null;
+        GameState.Snake playerSnake = null;
+        for (var entry : playerSnakes.entrySet()){
+            if (entry.getKey().equals(gamePlayer)){
+                changingPlayer = entry.getKey();
+                playerSnake = entry.getValue();
+                break;
+            }
+        }
+        playerSnakes.remove(changingPlayer);
+        Direction snakeDirection = playerSnakeDirection.get(changingPlayer);
+        playerSnakeDirection.remove(changingPlayer);
+        playersScore.remove(changingPlayer);
+        lastMessageTime.remove(changingPlayer);
+        GamePlayer newRolePlayer = GamePlayer.newBuilder()
+                .setName(changingPlayer.getName())
+                .setId(changingPlayer.getId())
+                .setIpAddress(changingPlayer.getIpAddress())
+                .setPort(changingPlayer.getPort())
+                .setRole(changingPlayer.getRole())
+                .setScore(score)
+                .build();
+        playerSnakes.put(newRolePlayer, playerSnake);
+        playerSnakeDirection.put(newRolePlayer, snakeDirection);
+        playersScore.put(newRolePlayer, newRolePlayer.getScore());
+        lastMessageTime.put(newRolePlayer, System.currentTimeMillis());
+        return newRolePlayer;
+    }
+
+    public int getPlayerScore(GamePlayer gamePlayer){
+        return playersScore.get(gamePlayer);
+    }
+
+    public void addPlayerScore(GamePlayer gamePlayer){
+        playersScore.put(gamePlayer, gamePlayer.getScore());
+    }
+
+    public ConcurrentHashMap<GamePlayer, Integer> getPlayersScore(){
+        return playersScore;
+    }
+
+    public ConcurrentHashMap<UnconfirmedMessage, Long> getUnconfirmedMessages(){
+        return unconfirmedMessages;
+    }
+
+    public ConcurrentHashMap<GamePlayer, Long> getLastMessageTime(){
+        return lastMessageTime;
     }
 
     public GameState.Snake getSnakeByPlayer(GamePlayer gamePlayer){
         return playerSnakes.get(gamePlayer);
     }
 
-    public void updatePlayerTime(InetSocketAddress playerAddress){
-        for (var entry : lastMessageTime.entrySet()){
-            if (entry.getKey().getIpAddress().equals(playerAddress.getHostName()) && entry.getKey().getPort() == playerAddress.getPort()){
-                lastMessageTime.replace(entry.getKey(), System.currentTimeMillis());
-                break;
+    public void updatePlayerTime(int playerID){
+        if (getPlayerByID(playerID) != null) {
+            if (!lastMessageTime.containsKey(getPlayerByID(playerID))) {
+                lastMessageTime.put(getPlayerByID(playerID), System.currentTimeMillis());
+            } else {
+                for (var entry : lastMessageTime.entrySet()) {
+                    if (entry.getKey().getId() == playerID) {
+                        lastMessageTime.replace(entry.getKey(), System.currentTimeMillis());
+                        break;
+                    }
+                }
             }
         }
     }
@@ -260,10 +361,6 @@ public class GameBoardModel {
                 break;
             }
         }
-    }
-
-    public Set<GamePlayer> getPlayers(){
-        return playersScore.keySet();
     }
 
     public int getFoodCount(){
@@ -306,10 +403,6 @@ public class GameBoardModel {
         return boardCells.get(rows * y + x).getBoardCellType() == BoardCellType.FOOD;
     }
 
-    public boolean isEmptyCell(int x, int y){
-        return boardCells.get(rows * y + x).getBoardCellType() == BoardCellType.EMPTY;
-    }
-
     public List<GameState.Coord> getAllFood(){
         List<GameState.Coord> allFood = new ArrayList<>();
         for (var cell : boardCells){
@@ -334,6 +427,10 @@ public class GameBoardModel {
         return playerSnakes.entrySet();
     }
 
+    public void clearAllPlayers(){
+        playerSnakes.clear();
+    }
+
     public GamePlayer getPlayerByID(int playerID){
         GamePlayer gamePlayer = null;
         for (var entry : playerSnakes.entrySet()){
@@ -349,6 +446,18 @@ public class GameBoardModel {
         GamePlayer gamePlayer = null;
         for (var entry : playerSnakes.entrySet()){
             if (entry.getKey().getIpAddress().equals(playerAddress.getHostString()) && entry.getKey().getPort() == playerAddress.getPort()
+                    && entry.getValue().getState() == GameState.Snake.SnakeState.ALIVE){
+                gamePlayer = entry.getKey();
+                break;
+            }
+        }
+        return gamePlayer;
+    }
+
+    public GamePlayer getPlayerByAddress(String ip, int port){
+        GamePlayer gamePlayer = null;
+        for (var entry : playerSnakes.entrySet()){
+            if (entry.getKey().getIpAddress().equals(ip) && entry.getKey().getPort() == port
                     && entry.getValue().getState() == GameState.Snake.SnakeState.ALIVE){
                 gamePlayer = entry.getKey();
                 break;
@@ -380,10 +489,19 @@ public class GameBoardModel {
         }
     }
 
-    public void addAllPlayersScore(List<GamePlayer> gamePlayers){
-        for (var gamePlayer : gamePlayers){
-            playersScore.put(gamePlayer, gamePlayer.getScore());
+    public GamePlayer getPlayerBySnake(GameState.Snake snake){
+        GamePlayer gamePlayer = null;
+        for (var entry : playerSnakes.entrySet()){
+            if (entry.getValue().equals(snake)){
+                gamePlayer = entry.getKey();
+                break;
+            }
         }
+        return gamePlayer;
+    }
+
+    public Set<GamePlayer> getPlayers(){
+        return playersScore.keySet();
     }
 
     public void replaceSnake(GameState.Snake oldSnake, GameState.Snake newSnake){
@@ -433,6 +551,18 @@ public class GameBoardModel {
 
     public int getNumberOfPlayers(){
         return playerSnakes.size();
+    }
+
+    public boolean hasSnakesOnBoard(){
+        for (var entry : playerSnakes.entrySet()){
+            if (entry.getValue().getState() == GameState.Snake.SnakeState.ALIVE){
+                if (entry.getValue().getPointsList().size() > 1){
+                    return true;
+                }
+            }
+            else return true;
+        }
+        return false;
     }
 
     public int getAliveSnakesCount(){
