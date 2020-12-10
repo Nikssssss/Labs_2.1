@@ -135,6 +135,14 @@ public class ServerGameProcess implements GameProcess{
         multicastSenderThread.interrupt();
         unicastReceiverThread.interrupt();
         messageTimeCheckerThread.interrupt();
+        try {
+            processThread.join();
+            multicastSenderThread.join();
+            unicastReceiverThread.join();
+            messageTimeCheckerThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override

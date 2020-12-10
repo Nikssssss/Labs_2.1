@@ -91,6 +91,13 @@ public class ClientGameProcess implements GameProcess {
         gameBoardModel.clearUnconfirmedMessages();
         gameBoardModel.clearLastMessageTime();
         gameBoardModel.clearReceivedMessages();
+        try {
+            unicastReceiverThread.join();
+            messageTimeCheckerThread.join();
+            pingSenderThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -200,7 +207,6 @@ public class ClientGameProcess implements GameProcess {
     @Override
     public void handleError(GameMessage gameMessage) {
         System.out.println(gameMessage.getError().getErrorMessage());
-        stop();
         exit();
         gameLauncher.enterLobby();
     }
