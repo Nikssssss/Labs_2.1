@@ -1,16 +1,19 @@
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 
-public class KeyAttachment {
+public class BasicAttachment {
     private ByteBuffer input;
     private ByteBuffer output;
     private ClientMessageStatus clientMessageStatus;
     private SelectionKey remoteServer;
+    private SelectionKey ownKey;
+    private int serverPort;
 
-    public KeyAttachment(ByteBuffer input, ByteBuffer output){
+    public BasicAttachment(ByteBuffer input, ByteBuffer output, SelectionKey ownKey){
         clientMessageStatus = ClientMessageStatus.GREETING;
         this.input = input;
         this.output = output;
+        this.ownKey = ownKey;
     }
 
     public ByteBuffer getInput() {
@@ -23,10 +26,6 @@ public class KeyAttachment {
 
     public ClientMessageStatus getClientMessageStatus() {
         return clientMessageStatus;
-    }
-
-    public void setInput(ByteBuffer input) {
-        this.input = input;
     }
 
     public void setOutput(ByteBuffer output) {
@@ -43,5 +42,17 @@ public class KeyAttachment {
 
     public void setRemoteServer(SelectionKey remoteServer) {
         this.remoteServer = remoteServer;
+    }
+
+    public void setServerPort(int serverPort) {
+        this.serverPort = serverPort;
+    }
+
+    public int getServerPort(){
+        return serverPort;
+    }
+
+    public SelectionKey getOwnKey(){
+        return ownKey;
     }
 }

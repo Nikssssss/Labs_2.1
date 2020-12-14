@@ -7,7 +7,7 @@ public class ProxyServer {
         selectionReceiver = new SelectionReceiver(port);
     }
 
-    public void start() throws IOException {
+    public void start() {
         selectionReceiver.start();
     }
 }
